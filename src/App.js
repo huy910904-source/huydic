@@ -7,8 +7,7 @@ const audioDB = {
   init() {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open("DictationAudioDB", 1);
-      request.onupgradeneeded = (e) =>
-        e.target.result.createObjectStore("audios");
+      request.onupgradeneeded = (e) => e.target.result.createObjectStore("audios");
       request.onsuccess = (e) => resolve(e.target.result);
       request.onerror = (e) => reject(e.target.error);
     });
@@ -39,50 +38,24 @@ const audioDB = {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-  },
+  }
 };
 
 // --- BỘ LỌC TỪ VIẾT TẮT ---
 const expandContractions = (str) => {
   let s = str?.toLowerCase() || "";
   const map = {
-    "i'm": "i am",
-    "can't": "cannot",
-    "won't": "will not",
-    "don't": "do not",
-    "doesn't": "does not",
-    "didn't": "did not",
-    "isn't": "is not",
-    "aren't": "are not",
-    "haven't": "have not",
-    "hasn't": "has not",
-    "it's": "it is",
-    "that's": "that is",
-    "there's": "there is",
-    "what's": "what is",
-    "he's": "he is",
-    "she's": "she is",
-    "you're": "you are",
-    "we're": "we are",
-    "they're": "they are",
-    "i've": "i have",
-    "you've": "you have",
-    "we've": "we have",
-    "they've": "they have",
-    "i'll": "i will",
-    "you'll": "you will",
-    "we'll": "we will",
-    "they'll": "they will",
-    "i'd": "i would",
-    "you'd": "you would",
+    "i'm": "i am", "can't": "cannot", "won't": "will not", "don't": "do not", "doesn't": "does not",
+    "didn't": "did not", "isn't": "is not", "aren't": "are not", "haven't": "have not", "hasn't": "has not",
+    "it's": "it is", "that's": "that is", "there's": "there is", "what's": "what is", "he's": "he is",
+    "she's": "she is", "you're": "you are", "we're": "we are", "they're": "they are", "i've": "i have",
+    "you've": "you have", "we've": "we have", "they've": "they have", "i'll": "i will", "you'll": "you will",
+    "we'll": "we will", "they'll": "they will", "i'd": "i would", "you'd": "you would",
   };
   for (const [key, val] of Object.entries(map)) {
     s = s.replace(new RegExp(`\\b${key}\\b`, "g"), val);
   }
-  return s
-    .replace(/[^a-z0-9 ]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return s.replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
 };
 
 const normalize = (str) => expandContractions(str);
@@ -121,18 +94,14 @@ export default function App() {
 
   // --- SỔ TỪ VỰNG ---
   const [vocabList, setVocabList] = useState([]);
-  const [newVocab, setNewVocab] = useState({
-    word: "",
-    meaning: "",
-    example: "",
-  });
+  const [newVocab, setNewVocab] = useState({ word: "", meaning: "", example: "" });
 
   // 1. TẢI DỮ LIỆU TỪ TRÌNH DUYỆT (KÈM AUDIO TỪ DATABASE)
   useEffect(() => {
     const loadSavedData = async () => {
       const savedVocab = localStorage.getItem("my_vocab_book");
       if (savedVocab) setVocabList(JSON.parse(savedVocab));
-
+      
       const savedLibrary = localStorage.getItem("my_dictation_library");
       if (savedLibrary) {
         const parsedLib = JSON.parse(savedLibrary);
@@ -154,19 +123,13 @@ export default function App() {
       }
       setIsDBLoading(false);
     };
-
+    
     loadSavedData();
   }, []);
 
   // LƯU TIẾN ĐỘ
-  useEffect(
-    () => localStorage.setItem("my_vocab_book", JSON.stringify(vocabList)),
-    [vocabList]
-  );
-  useEffect(
-    () => localStorage.setItem("my_dictation_library", JSON.stringify(library)),
-    [library]
-  );
+  useEffect(() => localStorage.setItem("my_vocab_book", JSON.stringify(vocabList)), [vocabList]);
+  useEffect(() => localStorage.setItem("my_dictation_library", JSON.stringify(library)), [library]);
 
   // CUỘN KHUNG
   useEffect(() => {
@@ -187,9 +150,7 @@ export default function App() {
   }, [playbackRate]);
 
   const activeLesson = library.find((l) => l.id === activeLessonId);
-  const currentSegment = activeLesson
-    ? activeLesson.data[activeLesson.currentIdx]
-    : null;
+  const currentSegment = activeLesson ? activeLesson.data[activeLesson.currentIdx] : null;
   const currentAudioUrl = sessionAudioUrls[activeLessonId];
 
   useEffect(() => {
@@ -234,9 +195,7 @@ export default function App() {
         if (!audioRef.current || !activeLesson) return;
         const currentTime = audioRef.current.currentTime;
 
-        const activeIdx = activeLesson.data.findIndex(
-          (s) => currentTime >= s.start_time && currentTime <= s.end_time
-        );
+        const activeIdx = activeLesson.data.findIndex(s => currentTime >= s.start_time && currentTime <= s.end_time);
         if (activeIdx !== -1) setCurrentPlayingIdx(activeIdx);
 
         if (currentTime >= endSegment.end_time) {
@@ -255,15 +214,13 @@ export default function App() {
   );
 
   const playSegment = useCallback(() => {
-    if (activeLesson)
-      playRange(activeLesson.currentIdx, activeLesson.currentIdx);
+    if (activeLesson) playRange(activeLesson.currentIdx, activeLesson.currentIdx);
   }, [activeLesson, playRange]);
 
   const rewindAudio = () => {
     if (audioRef.current && currentSegment) {
       let newTime = audioRef.current.currentTime - 2;
-      if (newTime < currentSegment.start_time)
-        newTime = currentSegment.start_time;
+      if (newTime < currentSegment.start_time) newTime = currentSegment.start_time;
       audioRef.current.currentTime = newTime;
     }
   };
@@ -272,18 +229,11 @@ export default function App() {
   // QUA CÂU
   // ==========================================
   const resetDictationState = () => {
-    setInput("");
-    setAttemptsPerWord({});
-    setShowFeedback(false);
-    setIsSuccess(false);
+    setInput(""); setAttemptsPerWord({}); setShowFeedback(false); setIsSuccess(false);
   };
 
   const updateProgress = (lessonId, newIdx) => {
-    setLibrary((prev) =>
-      prev.map((lesson) =>
-        lesson.id === lessonId ? { ...lesson, currentIdx: newIdx } : lesson
-      )
-    );
+    setLibrary((prev) => prev.map((lesson) => lesson.id === lessonId ? { ...lesson, currentIdx: newIdx } : lesson));
   };
 
   const jumpToSentence = (newIdx) => {
@@ -303,15 +253,10 @@ export default function App() {
 
   const nextSentence = () => {
     if (isTransitioning.current) return;
-    if (
-      activeLesson &&
-      activeLesson.currentIdx < activeLesson.data.length - 1
-    ) {
+    if (activeLesson && activeLesson.currentIdx < activeLesson.data.length - 1) {
       isTransitioning.current = true;
       jumpToSentence(activeLesson.currentIdx + 1);
-      setTimeout(() => {
-        isTransitioning.current = false;
-      }, 500);
+      setTimeout(() => { isTransitioning.current = false; }, 500);
     } else {
       alert("🎉 Bạn đã hoàn thành toàn bộ bài nghe này!");
     }
@@ -330,11 +275,7 @@ export default function App() {
       setNewFileName(file.name.replace(".json", ""));
       const reader = new FileReader();
       reader.onload = (event) => {
-        try {
-          setNewJsonData(JSON.parse(event.target.result));
-        } catch (error) {
-          alert("Lỗi JSON!");
-        }
+        try { setNewJsonData(JSON.parse(event.target.result)); } catch (error) { alert("Lỗi JSON!"); }
       };
       reader.readAsText(file);
     }
@@ -342,15 +283,10 @@ export default function App() {
 
   const createNewLesson = async () => {
     if (!newJsonData || !newAudioFile) return;
-
+    
     const newId = Date.now().toString();
-    const newLesson = {
-      id: newId,
-      name: newFileName || "Bài học mới",
-      data: newJsonData,
-      currentIdx: 0,
-    };
-
+    const newLesson = { id: newId, name: newFileName || "Bài học mới", data: newJsonData, currentIdx: 0 };
+    
     // Lưu File Audio vào Két sắt IndexedDB
     try {
       await audioDB.save(newId, newAudioFile);
@@ -359,27 +295,17 @@ export default function App() {
     }
 
     setLibrary((prev) => [newLesson, ...prev]);
-    setSessionAudioUrls((prev) => ({
-      ...prev,
-      [newId]: URL.createObjectURL(newAudioFile),
-    }));
-
-    setNewJsonData(null);
-    setNewAudioFile(null);
-    setNewFileName("");
-    setActiveLessonId(newId);
-    setActiveTab("DICTATION");
-    resetDictationState();
+    setSessionAudioUrls((prev) => ({ ...prev, [newId]: URL.createObjectURL(newAudioFile) }));
+    
+    setNewJsonData(null); setNewAudioFile(null); setNewFileName("");
+    setActiveLessonId(newId); setActiveTab("DICTATION"); resetDictationState();
   };
 
   const deleteLesson = async (id) => {
     if (window.confirm("Bạn có chắc muốn xóa vĩnh viễn bài này?")) {
       await audioDB.delete(id); // Xóa file rác trong két sắt
       setLibrary((prev) => prev.filter((l) => l.id !== id));
-      if (activeLessonId === id) {
-        setActiveLessonId(null);
-        setActiveTab("LIBRARY");
-      }
+      if (activeLessonId === id) { setActiveLessonId(null); setActiveTab("LIBRARY"); }
     }
   };
 
@@ -389,49 +315,30 @@ export default function App() {
     const transcriptStr = normalize(currentSegment.transcript);
     const userStr = normalize(input);
     if (transcriptStr === userStr) {
-      setIsSuccess(true);
-      setShowFeedback(true);
-      if (audioRef.current) audioRef.current.pause();
-      return;
+      setIsSuccess(true); setShowFeedback(true);
+      if (audioRef.current) audioRef.current.pause(); return;
     }
     const transcriptWords = transcriptStr.split(/\s+/).filter(Boolean);
     const userWords = userStr.split(/\s+/).filter(Boolean);
     let errorIdx = -1;
     for (let i = 0; i < transcriptWords.length; i++) {
-      if (userWords[i] !== transcriptWords[i]) {
-        errorIdx = i;
-        break;
-      }
+      if (userWords[i] !== transcriptWords[i]) { errorIdx = i; break; }
     }
-    if (errorIdx === -1 && userWords.length < transcriptWords.length)
-      errorIdx = userWords.length;
-    setAttemptsPerWord((prev) => ({
-      ...prev,
-      [errorIdx]: (prev[errorIdx] || 0) + 1,
-    }));
-    setIsSuccess(false);
-    setShowFeedback(true);
+    if (errorIdx === -1 && userWords.length < transcriptWords.length) errorIdx = userWords.length;
+    setAttemptsPerWord((prev) => ({ ...prev, [errorIdx]: (prev[errorIdx] || 0) + 1 }));
+    setIsSuccess(false); setShowFeedback(true);
   };
 
   const handleSurrenderWord = () => {
-    const rawTranscriptWords = currentSegment.transcript
-      .split(/\s+/)
-      .filter(Boolean);
+    const rawTranscriptWords = currentSegment.transcript.split(/\s+/).filter(Boolean);
     const userWords = input.trim().split(/\s+/).filter(Boolean);
     let errorIdx = -1;
     for (let i = 0; i < rawTranscriptWords.length; i++) {
-      if (normalize(userWords[i]) !== normalize(rawTranscriptWords[i])) {
-        errorIdx = i;
-        break;
-      }
+      if (normalize(userWords[i]) !== normalize(rawTranscriptWords[i])) { errorIdx = i; break; }
     }
-    if (errorIdx === -1 && userWords.length < rawTranscriptWords.length)
-      errorIdx = userWords.length;
+    if (errorIdx === -1 && userWords.length < rawTranscriptWords.length) errorIdx = userWords.length;
     if (errorIdx !== -1) {
-      const correctWord = rawTranscriptWords[errorIdx].replace(
-        /[^a-zA-Z0-9'’]/g,
-        ""
-      );
+      const correctWord = rawTranscriptWords[errorIdx].replace(/[^a-zA-Z0-9'’]/g, "");
       const newInputArray = userWords.slice(0, errorIdx);
       newInputArray.push(correctWord);
       setInput(newInputArray.join(" ") + " ");
@@ -444,95 +351,27 @@ export default function App() {
     setVocabList([{ ...newVocab, id: Date.now() }, ...vocabList]);
     setNewVocab({ word: "", meaning: "", example: "" });
   };
-  const deleteVocab = (id) =>
-    setVocabList(vocabList.filter((v) => v.id !== id));
+  const deleteVocab = (id) => setVocabList(vocabList.filter((v) => v.id !== id));
 
   if (isDBLoading) {
-    return (
-      <div style={{ color: "white", textAlign: "center", marginTop: "50px" }}>
-        Đang tải dữ liệu từ máy...
-      </div>
-    );
+    return <div style={{ color: 'white', textAlign: 'center', marginTop: '50px' }}>Đang tải dữ liệu từ máy...</div>;
   }
 
   // ==========================================
   // RENDER GIAO DIỆN CHÍNH
   // ==========================================
   return (
-    <div
-      style={{
-        padding: "20px",
-        maxWidth: "1000px",
-        margin: "0 auto",
-        fontFamily: "sans-serif",
-        backgroundColor: "#0f172a",
-        color: "#e2e8f0",
-        minHeight: "100vh",
-      }}
-    >
+    <div style={{ padding: "20px", maxWidth: "1000px", margin: "0 auto", fontFamily: "sans-serif", backgroundColor: "#0f172a", color: "#e2e8f0", minHeight: "100vh" }}>
+      
       {/* HEADER TABS */}
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          borderBottom: "2px solid #334155",
-          paddingBottom: "10px",
-          marginBottom: "20px",
-        }}
-      >
-        <button
-          onClick={() => setActiveTab("LIBRARY")}
-          style={{
-            flex: 1,
-            padding: "12px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            background: activeTab === "LIBRARY" ? "#10b981" : "transparent",
-            color: activeTab === "LIBRARY" ? "#0f172a" : "#94a3b8",
-            border: "none",
-            borderRadius: "8px",
-            cursor: "pointer",
-            transition: "all 0.3s",
-          }}
-        >
+      <div style={{ display: "flex", gap: "10px", borderBottom: "2px solid #334155", paddingBottom: "10px", marginBottom: "20px" }}>
+        <button onClick={() => setActiveTab("LIBRARY")} style={{ flex: 1, padding: "12px", fontSize: "16px", fontWeight: "bold", background: activeTab === "LIBRARY" ? "#10b981" : "transparent", color: activeTab === "LIBRARY" ? "#0f172a" : "#94a3b8", border: "none", borderRadius: "8px", cursor: "pointer", transition: "all 0.3s" }}>
           📚 Thư Viện ({library.length})
         </button>
-        <button
-          onClick={() => {
-            if (activeLessonId) setActiveTab("DICTATION");
-            else alert("Chọn bài học trước!");
-          }}
-          style={{
-            flex: 1,
-            padding: "12px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            background: activeTab === "DICTATION" ? "#38bdf8" : "transparent",
-            color: activeTab === "DICTATION" ? "#0f172a" : "#94a3b8",
-            border: "none",
-            borderRadius: "8px",
-            cursor: "pointer",
-            transition: "all 0.3s",
-            opacity: activeLessonId ? 1 : 0.5,
-          }}
-        >
+        <button onClick={() => { if (activeLessonId) setActiveTab("DICTATION"); else alert("Chọn bài học trước!"); }} style={{ flex: 1, padding: "12px", fontSize: "16px", fontWeight: "bold", background: activeTab === "DICTATION" ? "#38bdf8" : "transparent", color: activeTab === "DICTATION" ? "#0f172a" : "#94a3b8", border: "none", borderRadius: "8px", cursor: "pointer", transition: "all 0.3s", opacity: activeLessonId ? 1 : 0.5 }}>
           🎧 Luyện Nghe
         </button>
-        <button
-          onClick={() => setActiveTab("VOCAB")}
-          style={{
-            flex: 1,
-            padding: "12px",
-            fontSize: "16px",
-            fontWeight: "bold",
-            background: activeTab === "VOCAB" ? "#a855f7" : "transparent",
-            color: activeTab === "VOCAB" ? "#fff" : "#94a3b8",
-            border: "none",
-            borderRadius: "8px",
-            cursor: "pointer",
-            transition: "all 0.3s",
-          }}
-        >
+        <button onClick={() => setActiveTab("VOCAB")} style={{ flex: 1, padding: "12px", fontSize: "16px", fontWeight: "bold", background: activeTab === "VOCAB" ? "#a855f7" : "transparent", color: activeTab === "VOCAB" ? "#fff" : "#94a3b8", border: "none", borderRadius: "8px", cursor: "pointer", transition: "all 0.3s" }}>
           📖 Sổ Từ ({vocabList.length})
         </button>
       </div>
@@ -540,193 +379,50 @@ export default function App() {
       {/* ================= TAB 1: THƯ VIỆN ================= */}
       {activeTab === "LIBRARY" && (
         <div>
-          <div
-            style={{
-              background: "#1e293b",
-              padding: "20px",
-              borderRadius: "12px",
-              marginBottom: "30px",
-              border: "2px dashed #334155",
-            }}
-          >
-            <h3 style={{ color: "#38bdf8", marginTop: 0 }}>
-              ➕ Thêm Bài Học Mới
-            </h3>
+          <div style={{ background: "#1e293b", padding: "20px", borderRadius: "12px", marginBottom: "30px", border: "2px dashed #334155" }}>
+            <h3 style={{ color: "#38bdf8", marginTop: 0 }}>➕ Thêm Bài Học Mới</h3>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
               <div style={{ flex: 1, minWidth: "200px" }}>
-                <p
-                  style={{
-                    margin: "0 0 5px 0",
-                    fontSize: "14px",
-                    color: "#94a3b8",
-                  }}
-                >
-                  1. Tải lên Audio (.mp3)
-                </p>
-                <input
-                  type="file"
-                  accept=".mp3, .wav, audio/mp3, audio/wav, audio/*"
-                  onChange={handleNewAudioUpload}
-                  style={{ color: "#fff" }}
-                />
+                <p style={{ margin: "0 0 5px 0", fontSize: "14px", color: "#94a3b8" }}>1. Tải lên Audio (.mp3)</p>
+                <input type="file" accept=".mp3, .wav, audio/mp3, audio/wav, audio/*" onChange={handleNewAudioUpload} style={{ color: "#fff" }} />
               </div>
               <div style={{ flex: 1, minWidth: "200px" }}>
-                <p
-                  style={{
-                    margin: "0 0 5px 0",
-                    fontSize: "14px",
-                    color: "#94a3b8",
-                  }}
-                >
-                  2. Tải lên Script (.json)
-                </p>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleNewJsonUpload}
-                  style={{ color: "#fff" }}
-                />
+                <p style={{ margin: "0 0 5px 0", fontSize: "14px", color: "#94a3b8" }}>2. Tải lên Script (.json)</p>
+                <input type="file" accept=".json" onChange={handleNewJsonUpload} style={{ color: "#fff" }} />
               </div>
             </div>
-            <button
-              onClick={createNewLesson}
-              disabled={!newJsonData || !newAudioFile}
-              style={{
-                marginTop: "15px",
-                padding: "12px 20px",
-                background:
-                  !newJsonData || !newAudioFile ? "#334155" : "#10b981",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                cursor:
-                  !newJsonData || !newAudioFile ? "not-allowed" : "pointer",
-              }}
-            >
+            <button onClick={createNewLesson} disabled={!newJsonData || !newAudioFile} style={{ marginTop: "15px", padding: "12px 20px", background: !newJsonData || !newAudioFile ? "#334155" : "#10b981", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: !newJsonData || !newAudioFile ? "not-allowed" : "pointer" }}>
               Tạo và Học Ngay 🚀
             </button>
           </div>
 
           <h3 style={{ color: "#e2e8f0" }}>📂 Các bài học đang theo dõi</h3>
           {library.length === 0 ? (
-            <p style={{ color: "#64748b", fontStyle: "italic" }}>
-              Thư viện của bạn đang trống.
-            </p>
+            <p style={{ color: "#64748b", fontStyle: "italic" }}>Thư viện của bạn đang trống.</p>
           ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               {library.map((lesson) => (
-                <div
-                  key={lesson.id}
-                  style={{
-                    background: "#1e293b",
-                    padding: "20px",
-                    borderRadius: "12px",
-                    borderLeft: "4px solid #38bdf8",
-                    position: "relative",
-                  }}
-                >
-                  <button
-                    onClick={() => deleteLesson(lesson.id)}
-                    style={{
-                      position: "absolute",
-                      top: "15px",
-                      right: "15px",
-                      background: "transparent",
-                      border: "none",
-                      color: "#ef4444",
-                      fontSize: "16px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    🗑 Xóa
-                  </button>
-                  <h3 style={{ margin: "0 0 10px 0", color: "#fff" }}>
-                    {lesson.name}
-                  </h3>
-                  <div
-                    style={{
-                      background: "#0f172a",
-                      borderRadius: "8px",
-                      height: "8px",
-                      overflow: "hidden",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${
-                          (lesson.currentIdx / lesson.data.length) * 100
-                        }%`,
-                        height: "100%",
-                        background: "#10b981",
-                      }}
-                    ></div>
+                <div key={lesson.id} style={{ background: "#1e293b", padding: "20px", borderRadius: "12px", borderLeft: "4px solid #38bdf8", position: "relative" }}>
+                  <button onClick={() => deleteLesson(lesson.id)} style={{ position: "absolute", top: "15px", right: "15px", background: "transparent", border: "none", color: "#ef4444", fontSize: "16px", cursor: "pointer" }}>🗑 Xóa</button>
+                  <h3 style={{ margin: "0 0 10px 0", color: "#fff" }}>{lesson.name}</h3>
+                  <div style={{ background: "#0f172a", borderRadius: "8px", height: "8px", overflow: "hidden", marginBottom: "10px" }}>
+                    <div style={{ width: `${(lesson.currentIdx / lesson.data.length) * 100}%`, height: "100%", background: "#10b981" }}></div>
                   </div>
-                  <p
-                    style={{
-                      margin: "0 0 15px 0",
-                      fontSize: "14px",
-                      color: "#94a3b8",
-                    }}
-                  >
-                    Tiến độ: Câu {lesson.currentIdx + 1} / {lesson.data.length}
-                  </p>
-
+                  <p style={{ margin: "0 0 15px 0", fontSize: "14px", color: "#94a3b8" }}>Tiến độ: Câu {lesson.currentIdx + 1} / {lesson.data.length}</p>
+                  
                   {sessionAudioUrls[lesson.id] ? (
-                    <button
-                      onClick={() => {
-                        setActiveLessonId(lesson.id);
-                        setActiveTab("DICTATION");
-                        resetDictationState();
-                      }}
-                      style={{
-                        padding: "10px 20px",
-                        background: "#3b82f6",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "8px",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                      }}
-                    >
+                    <button onClick={() => { setActiveLessonId(lesson.id); setActiveTab("DICTATION"); resetDictationState(); }} style={{ padding: "10px 20px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer" }}>
                       ▶ Học tiếp
                     </button>
                   ) : (
-                    <div
-                      style={{
-                        background: "#334155",
-                        padding: "10px",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <p
-                        style={{
-                          margin: "0 0 8px 0",
-                          fontSize: "13px",
-                          color: "#fca5a5",
-                        }}
-                      >
-                        ⚠ Bộ nhớ bị xóa, cần nối lại MP3:
-                      </p>
-                      <input
-                        type="file"
-                        accept=".mp3, .wav, audio/mp3, audio/wav, audio/*"
-                        onChange={async (e) => {
-                          if (e.target.files[0]) {
-                            await audioDB.save(lesson.id, e.target.files[0]);
-                            setSessionAudioUrls((prev) => ({
-                              ...prev,
-                              [lesson.id]: URL.createObjectURL(
-                                e.target.files[0]
-                              ),
-                            }));
-                          }
-                        }}
-                        style={{ color: "#fff", fontSize: "13px" }}
-                      />
+                    <div style={{ background: "#334155", padding: "10px", borderRadius: "8px" }}>
+                      <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#fca5a5" }}>⚠ Bộ nhớ bị xóa, cần nối lại MP3:</p>
+                      <input type="file" accept=".mp3, .wav, audio/mp3, audio/wav, audio/*" onChange={async (e) => { 
+                        if (e.target.files[0]) { 
+                          await audioDB.save(lesson.id, e.target.files[0]);
+                          setSessionAudioUrls((prev) => ({ ...prev, [lesson.id]: URL.createObjectURL(e.target.files[0]) })); 
+                        } 
+                      }} style={{ color: "#fff", fontSize: "13px" }} />
                     </div>
                   )}
                 </div>
@@ -738,285 +434,74 @@ export default function App() {
 
       {/* ================= TAB 2: LUYỆN NGHE & FULL SCRIPT ================= */}
       {activeTab === "DICTATION" && activeLesson && (
-        <div style={{ display: "flex", gap: "20px", flexDirection: "column" }}>
+        <div style={{ display: 'flex', gap: '20px', flexDirection: 'column' }}>
           <audio ref={audioRef} src={currentAudioUrl} />
 
           {/* HÀNG HEADER */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "5px",
-            }}
-          >
-            <span
-              style={{ fontSize: "18px", color: "#94a3b8", fontWeight: "bold" }}
-            >
-              {activeLesson.name}
-            </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+            <span style={{ fontSize: "18px", color: "#94a3b8", fontWeight: "bold" }}>{activeLesson.name}</span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "#e2e8f0",
-                  fontWeight: "bold",
-                }}
-              >
-                Đang làm câu
-              </span>
+              <span style={{ fontSize: "16px", color: "#e2e8f0", fontWeight: "bold" }}>Đang làm câu</span>
               <select
                 value={activeLesson.currentIdx}
                 onChange={(e) => jumpToSentence(parseInt(e.target.value, 10))}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: "8px",
-                  background: "#1e293b",
-                  color: "#38bdf8",
-                  border: "1px solid #334155",
-                  fontSize: "16px",
-                  fontWeight: "bold",
-                  outline: "none",
-                  cursor: "pointer",
-                }}
+                style={{ padding: "6px 12px", borderRadius: "8px", background: "#1e293b", color: "#38bdf8", border: "1px solid #334155", fontSize: "16px", fontWeight: "bold", outline: "none", cursor: "pointer" }}
               >
-                {activeLesson.data.map((_, idx) => (
-                  <option key={idx} value={idx}>
-                    {idx + 1}
-                  </option>
-                ))}
+                {activeLesson.data.map((_, idx) => ( <option key={idx} value={idx}>{idx + 1}</option> ))}
               </select>
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "#94a3b8",
-                  fontWeight: "bold",
-                }}
-              >
-                / {activeLesson.data.length}
-              </span>
+              <span style={{ fontSize: "16px", color: "#94a3b8", fontWeight: "bold" }}>/ {activeLesson.data.length}</span>
             </div>
           </div>
 
           {/* BẢNG ĐIỀU KHIỂN AUDIO TOÀN NĂNG */}
-          <div
-            style={{
-              background: "#1e293b",
-              padding: "15px",
-              borderRadius: "12px",
-            }}
-          >
+          <div style={{ background: "#1e293b", padding: "15px", borderRadius: "12px" }}>
+            
             {/* Khu vực phát thông thường */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "10px",
-                marginBottom: "15px",
-              }}
-            >
-              <button
-                onClick={playSegment}
-                style={{
-                  padding: "10px 15px",
-                  borderRadius: "8px",
-                  background: "#38bdf8",
-                  color: "#0f172a",
-                  border: "none",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                }}
-              >
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "15px" }}>
+              <button onClick={playSegment} style={{ padding: "10px 15px", borderRadius: "8px", background: "#38bdf8", color: "#0f172a", border: "none", fontWeight: "bold", cursor: "pointer", display: 'flex', alignItems: 'center', gap: '5px' }}>
                 ▶ Phát câu này
               </button>
-              <button
-                onClick={() =>
-                  playRange(
-                    Math.max(0, activeLesson.currentIdx - 1),
-                    activeLesson.currentIdx
-                  )
-                }
-                style={{
-                  padding: "10px 15px",
-                  borderRadius: "8px",
-                  background: "#475569",
-                  color: "#fff",
-                  border: "1px solid #64748b",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={() => playRange(Math.max(0, activeLesson.currentIdx - 1), activeLesson.currentIdx)} style={{ padding: "10px 15px", borderRadius: "8px", background: "#475569", color: "#fff", border: "1px solid #64748b", fontWeight: "bold", cursor: "pointer" }}>
                 🔗 Nghe (n-1) & (n)
               </button>
-              <button
-                onClick={() => playRange(0, activeLesson.currentIdx)}
-                style={{
-                  padding: "10px 15px",
-                  borderRadius: "8px",
-                  background: "#475569",
-                  color: "#fff",
-                  border: "1px solid #64748b",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={() => playRange(0, activeLesson.currentIdx)} style={{ padding: "10px 15px", borderRadius: "8px", background: "#475569", color: "#fff", border: "1px solid #64748b", fontWeight: "bold", cursor: "pointer" }}>
                 ⏮ Nghe từ Câu 1 đến (n)
               </button>
-              <button
-                onClick={rewindAudio}
-                style={{
-                  padding: "10px 15px",
-                  borderRadius: "8px",
-                  background: "#334155",
-                  color: "#e2e8f0",
-                  border: "none",
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={rewindAudio} style={{ padding: "10px 15px", borderRadius: "8px", background: "#334155", color: "#e2e8f0", border: "none", cursor: "pointer" }}>
                 ⏪ Lùi 2s
               </button>
             </div>
 
             {/* Khu vực Tùy chỉnh đoạn nghe */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "10px",
-                paddingBottom: "15px",
-                borderBottom: "1px solid #334155",
-                marginBottom: "15px",
-              }}
-            >
-              <span
-                style={{
-                  color: "#94a3b8",
-                  fontSize: "14px",
-                  fontWeight: "bold",
-                }}
-              >
-                🔀 Tùy chọn đoạn:
-              </span>
-              <span style={{ color: "#e2e8f0", fontSize: "14px" }}>Từ</span>
-              <select
-                value={customStartIdx}
-                onChange={(e) =>
-                  setCustomStartIdx(parseInt(e.target.value, 10))
-                }
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: "6px",
-                  background: "#0f172a",
-                  color: "#a855f7",
-                  border: "1px solid #334155",
-                  outline: "none",
-                }}
-              >
-                {activeLesson.data.map((_, idx) => (
-                  <option key={idx} value={idx}>
-                    Câu {idx + 1}
-                  </option>
-                ))}
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', paddingBottom: '15px', borderBottom: "1px solid #334155", marginBottom: '15px' }}>
+              <span style={{ color: '#94a3b8', fontSize: '14px', fontWeight: 'bold' }}>🔀 Tùy chọn đoạn:</span>
+              <span style={{ color: '#e2e8f0', fontSize: '14px' }}>Từ</span>
+              <select value={customStartIdx} onChange={(e) => setCustomStartIdx(parseInt(e.target.value, 10))} style={{ padding: "4px 8px", borderRadius: "6px", background: "#0f172a", color: "#a855f7", border: "1px solid #334155", outline: "none" }}>
+                {activeLesson.data.map((_, idx) => ( <option key={idx} value={idx}>Câu {idx + 1}</option> ))}
               </select>
-              <span style={{ color: "#e2e8f0", fontSize: "14px" }}>đến</span>
-              <select
-                value={customEndIdx}
-                onChange={(e) => setCustomEndIdx(parseInt(e.target.value, 10))}
-                style={{
-                  padding: "4px 8px",
-                  borderRadius: "6px",
-                  background: "#0f172a",
-                  color: "#a855f7",
-                  border: "1px solid #334155",
-                  outline: "none",
-                }}
-              >
-                {activeLesson.data.map((_, idx) => (
-                  <option key={idx} value={idx}>
-                    Câu {idx + 1}
-                  </option>
-                ))}
+              <span style={{ color: '#e2e8f0', fontSize: '14px' }}>đến</span>
+              <select value={customEndIdx} onChange={(e) => setCustomEndIdx(parseInt(e.target.value, 10))} style={{ padding: "4px 8px", borderRadius: "6px", background: "#0f172a", color: "#a855f7", border: "1px solid #334155", outline: "none" }}>
+                {activeLesson.data.map((_, idx) => ( <option key={idx} value={idx}>Câu {idx + 1}</option> ))}
               </select>
-              <button
-                onClick={() => playRange(customStartIdx, customEndIdx)}
-                style={{
-                  padding: "6px 15px",
-                  borderRadius: "6px",
-                  background: "#a855f7",
-                  color: "#fff",
-                  border: "none",
-                  fontWeight: "bold",
-                  cursor: "pointer",
-                }}
-              >
+              <button onClick={() => playRange(customStartIdx, customEndIdx)} style={{ padding: "6px 15px", borderRadius: "6px", background: "#a855f7", color: "#fff", border: "none", fontWeight: "bold", cursor: "pointer" }}>
                 ▶ Phát đoạn chọn
               </button>
             </div>
-
+            
             {/* Khu vực Settings */}
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "20px",
-                alignItems: "center",
-              }}
-            >
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  color: "#10b981",
-                  fontWeight: "bold",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={isAutoLoop}
-                  onChange={(e) => setIsAutoLoop(e.target.checked)}
-                />
+            <div style={{ display: "flex", flexWrap: 'wrap', gap: "20px", alignItems: "center" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontSize: "14px", color: "#10b981", fontWeight: 'bold' }}>
+                <input type="checkbox" checked={isAutoLoop} onChange={(e) => setIsAutoLoop(e.target.checked)} />
                 🔁 Tự động lặp lại (Áp dụng mọi kiểu nghe)
               </label>
 
-              <label
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  color: "#fbbf24",
-                  fontWeight: "bold",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={showFullScript}
-                  onChange={(e) => setShowFullScript(e.target.checked)}
-                />
+              <label style={{ display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontSize: "14px", color: "#fbbf24", fontWeight: 'bold' }}>
+                <input type="checkbox" checked={showFullScript} onChange={(e) => setShowFullScript(e.target.checked)} />
                 📜 Hiện Full Script (Karaoke)
               </label>
 
-              <div style={{ marginLeft: "auto" }}>
-                <select
-                  value={playbackRate}
-                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-                  style={{
-                    padding: "6px",
-                    borderRadius: "6px",
-                    background: "#0f172a",
-                    color: "#38bdf8",
-                    border: "1px solid #334155",
-                    outline: "none",
-                  }}
-                >
+              <div style={{marginLeft: 'auto'}}>
+                <select value={playbackRate} onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} style={{ padding: "6px", borderRadius: "6px", background: "#0f172a", color: "#38bdf8", border: "1px solid #334155", outline: "none" }}>
                   <option value={0.75}>🐢 Tốc độ: 0.75x</option>
                   <option value={0.85}>🚶 Tốc độ: 0.85x</option>
                   <option value={1}>🏃 Tốc độ: 1.0x</option>
@@ -1028,227 +513,69 @@ export default function App() {
           </div>
 
           {/* VÙNG LÀM VIỆC */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: showFullScript ? "1fr 1fr" : "1fr",
-              gap: "20px",
-              transition: "all 0.3s",
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: showFullScript ? '1fr 1fr' : '1fr', gap: '20px', transition: 'all 0.3s' }}>
+            
             {/* CỘT 1: DICTATION CHÍNH */}
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <textarea
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <textarea 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    isSuccess ? nextSentence() : handleCheck();
-                  }
+                onKeyDown={(e) => { 
+                  if (e.key === "Enter" && !e.shiftKey) { 
+                    e.preventDefault(); 
+                    isSuccess ? nextSentence() : handleCheck(); 
+                  } 
                 }}
                 placeholder="Gõ đáp án vào đây... (Hệ thống tự động chấm điểm)"
-                style={{
-                  width: "100%",
-                  height: "120px",
-                  fontSize: "18px",
-                  padding: "15px",
-                  borderRadius: "12px",
-                  border: isSuccess ? "2px solid #22c55e" : "2px solid #334155",
-                  background: "#1e293b",
-                  color: "#fff",
-                  outline: "none",
-                  resize: "vertical",
-                  transition: "border 0.3s",
-                }}
+                style={{ width: "100%", height: "120px", fontSize: "18px", padding: "15px", borderRadius: "12px", border: isSuccess ? "2px solid #22c55e" : "2px solid #334155", background: "#1e293b", color: "#fff", outline: "none", resize: "vertical", transition: "border 0.3s" }}
               />
 
               <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
-                <button
-                  onClick={isSuccess ? nextSentence : handleCheck}
-                  style={{
-                    flex: 2,
-                    padding: "15px",
-                    fontSize: "18px",
-                    background: isSuccess ? "#3b82f6" : "#22c55e",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "12px",
-                    cursor: "pointer",
-                    fontWeight: "bold",
-                  }}
-                >
-                  {isSuccess
-                    ? "Tiếp tục ⮕ (Hoặc nhấn Enter)"
-                    : "Kiểm tra lỗi ✓ (Enter)"}
+                <button onClick={isSuccess ? nextSentence : handleCheck} style={{ flex: 2, padding: "15px", fontSize: "18px", background: isSuccess ? "#3b82f6" : "#22c55e", color: "white", border: "none", borderRadius: "12px", cursor: "pointer", fontWeight: "bold" }}>
+                  {isSuccess ? "Tiếp tục ⮕ (Hoặc nhấn Enter)" : "Kiểm tra lỗi ✓ (Enter)"}
                 </button>
                 {!isSuccess && (
-                  <button
-                    onClick={handleSurrenderWord}
-                    style={{
-                      flex: 1,
-                      padding: "15px",
-                      fontSize: "16px",
-                      background: "#334155",
-                      color: "#fca5a5",
-                      border: "none",
-                      borderRadius: "12px",
-                      cursor: "pointer",
-                      fontWeight: "bold",
-                    }}
-                  >
+                  <button onClick={handleSurrenderWord} style={{ flex: 1, padding: "15px", fontSize: "16px", background: "#334155", color: "#fca5a5", border: "none", borderRadius: "12px", cursor: "pointer", fontWeight: "bold" }}>
                     🏳️ Cho xin 1 từ
                   </button>
                 )}
               </div>
 
-              <div
-                ref={resultBoxRef}
-                style={{
-                  marginTop: "20px",
-                  border: "2px solid #334155",
-                  padding: "20px",
-                  borderRadius: "12px",
-                  background: "#1e293b",
-                  minHeight: "120px",
-                  maxHeight: showFullScript ? "250px" : "300px",
-                  overflowY: "auto",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "10px",
-                    fontSize: "20px",
-                    lineHeight: "1.8",
-                  }}
-                >
-                  {!showFeedback && (
-                    <span style={{ color: "#64748b", fontStyle: "italic" }}>
-                      Bản dịch sẽ tự động hiện khi hoàn thành...
-                    </span>
-                  )}
+              <div ref={resultBoxRef} style={{ marginTop: "20px", border: "2px solid #334155", padding: "20px", borderRadius: "12px", background: "#1e293b", minHeight: "120px", maxHeight: showFullScript ? "250px" : "300px", overflowY: "auto" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", fontSize: "20px", lineHeight: "1.8" }}>
+                  {!showFeedback && <span style={{ color: "#64748b", fontStyle: "italic" }}>Bản dịch sẽ tự động hiện khi hoàn thành...</span>}
+                  
+                  {showFeedback && currentSegment && currentSegment.transcript.split(/\s+/).filter(Boolean).map((word, i) => {
+                    const userWords = input.trim().split(/\s+/).filter(Boolean);
+                    const rawTranscriptWords = currentSegment.transcript.split(/\s+/).filter(Boolean);
+                    let currentErrorIdx = -1;
+                    for (let k = 0; k < rawTranscriptWords.length; k++) {
+                      if (normalize(userWords[k]) !== normalize(rawTranscriptWords[k])) { currentErrorIdx = k; break; }
+                    }
+                    if (currentErrorIdx === -1 && userWords.length < rawTranscriptWords.length) currentErrorIdx = userWords.length;
 
-                  {showFeedback &&
-                    currentSegment &&
-                    currentSegment.transcript
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .map((word, i) => {
-                        const userWords = input
-                          .trim()
-                          .split(/\s+/)
-                          .filter(Boolean);
-                        const rawTranscriptWords = currentSegment.transcript
-                          .split(/\s+/)
-                          .filter(Boolean);
-                        let currentErrorIdx = -1;
-                        for (let k = 0; k < rawTranscriptWords.length; k++) {
-                          if (
-                            normalize(userWords[k]) !==
-                            normalize(rawTranscriptWords[k])
-                          ) {
-                            currentErrorIdx = k;
-                            break;
-                          }
-                        }
-                        if (
-                          currentErrorIdx === -1 &&
-                          userWords.length < rawTranscriptWords.length
-                        )
-                          currentErrorIdx = userWords.length;
-
-                        if (i < currentErrorIdx || currentErrorIdx === -1)
-                          return (
-                            <span
-                              key={i}
-                              style={{ color: "#22c55e", fontWeight: "bold" }}
-                            >
-                              {word}
-                            </span>
-                          );
-
-                        if (i === currentErrorIdx && !isSuccess) {
-                          const attempts = attemptsPerWord[i] || 0;
-                          const cleanWord = word.replace(/[^a-zA-Z0-9'’]/g, "");
-                          const revealCount = Math.min(
-                            attempts > 0 ? attempts - 1 : 0,
-                            cleanWord.length
-                          );
-                          let hintStr = cleanWord.substring(0, revealCount);
-                          for (let j = revealCount; j < cleanWord.length; j++)
-                            hintStr += "_";
-                          return (
-                            <span
-                              key={i}
-                              style={{
-                                background: "#450a0a",
-                                border: "1px solid #f87171",
-                                padding: "2px 10px",
-                                borderRadius: "6px",
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "8px",
-                              }}
-                            >
-                              {userWords[i] && (
-                                <span
-                                  style={{
-                                    color: "#ef4444",
-                                    textDecoration: "line-through",
-                                    fontSize: "16px",
-                                  }}
-                                >
-                                  {userWords[i]}
-                                </span>
-                              )}
-                              <span
-                                style={{
-                                  color: "#fbbf24",
-                                  fontFamily: "monospace",
-                                  fontWeight: "bold",
-                                  letterSpacing: "2px",
-                                }}
-                              >
-                                {hintStr}
-                              </span>
-                            </span>
-                          );
-                        }
-                        return (
-                          <span key={i} style={{ color: "#475569" }}>
-                            ___
-                          </span>
-                        );
-                      })}
+                    if (i < currentErrorIdx || currentErrorIdx === -1) return <span key={i} style={{ color: "#22c55e", fontWeight: "bold" }}>{word}</span>;
+                    
+                    if (i === currentErrorIdx && !isSuccess) {
+                      const attempts = attemptsPerWord[i] || 0;
+                      const cleanWord = word.replace(/[^a-zA-Z0-9'’]/g, "");
+                      const revealCount = Math.min(attempts > 0 ? attempts - 1 : 0, cleanWord.length);
+                      let hintStr = cleanWord.substring(0, revealCount);
+                      for (let j = revealCount; j < cleanWord.length; j++) hintStr += "_";
+                      return (
+                        <span key={i} style={{ background: "#450a0a", border: "1px solid #f87171", padding: "2px 10px", borderRadius: "6px", display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                          {userWords[i] && <span style={{ color: "#ef4444", textDecoration: "line-through", fontSize: "16px" }}>{userWords[i]}</span>}
+                          <span style={{ color: "#fbbf24", fontFamily: "monospace", fontWeight: "bold", letterSpacing: "2px" }}>{hintStr}</span>
+                        </span>
+                      );
+                    }
+                    return <span key={i} style={{ color: "#475569" }}>___</span>;
+                  })}
                 </div>
                 {isSuccess && (
-                  <div
-                    style={{
-                      marginTop: "20px",
-                      borderTop: "2px dashed #475569",
-                      paddingTop: "15px",
-                    }}
-                  >
-                    <p
-                      style={{
-                        color: "#22c55e",
-                        fontWeight: "bold",
-                        fontSize: "18px",
-                      }}
-                    >
-                      🎉 Hoàn hảo!
-                    </p>
-                    <p
-                      style={{
-                        color: "#a78bfa",
-                        fontStyle: "italic",
-                        marginBottom: "10px",
-                      }}
-                    >
-                      🇻🇳 Dịch: {currentSegment?.translation}
-                    </p>
+                  <div style={{ marginTop: "20px", borderTop: "2px dashed #475569", paddingTop: "15px" }}>
+                    <p style={{ color: "#22c55e", fontWeight: "bold", fontSize: "18px" }}>🎉 Hoàn hảo!</p>
+                    <p style={{ color: "#a78bfa", fontStyle: "italic", marginBottom: "10px" }}>🇻🇳 Dịch: {currentSegment?.translation}</p>
                   </div>
                 )}
               </div>
@@ -1256,62 +583,29 @@ export default function App() {
 
             {/* CỘT 2: FULL SCRIPT */}
             {showFullScript && (
-              <div
-                style={{
-                  background: "#1e293b",
-                  border: "2px solid #334155",
-                  borderRadius: "12px",
-                  padding: "20px",
-                  maxHeight: "400px",
-                  overflowY: "auto",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                }}
-              >
-                <h4
-                  style={{
-                    margin: "0 0 10px 0",
-                    color: "#fbbf24",
-                    borderBottom: "1px solid #334155",
-                    paddingBottom: "10px",
-                    position: "sticky",
-                    top: "-20px",
-                    background: "#1e293b",
-                    zIndex: 10,
-                  }}
-                >
-                  📜 Full Script Tracker
-                </h4>
+              <div style={{ background: "#1e293b", border: "2px solid #334155", borderRadius: "12px", padding: "20px", maxHeight: "400px", overflowY: "auto", display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h4 style={{ margin: '0 0 10px 0', color: '#fbbf24', borderBottom: '1px solid #334155', paddingBottom: '10px', position: 'sticky', top: '-20px', background: '#1e293b', zIndex: 10 }}>📜 Full Script Tracker</h4>
                 {activeLesson.data.map((seg, idx) => {
                   const isPlaying = idx === currentPlayingIdx;
                   return (
-                    <p
-                      key={idx}
+                    <p 
+                      key={idx} 
                       id={`script-line-${idx}`}
                       style={{
                         margin: 0,
-                        padding: "10px",
-                        borderRadius: "8px",
-                        fontSize: "18px",
-                        lineHeight: "1.6",
-                        color: isPlaying ? "#0f172a" : "#94a3b8",
-                        background: isPlaying ? "#fbbf24" : "transparent",
-                        fontWeight: isPlaying ? "bold" : "normal",
-                        transition: "all 0.3s ease",
-                        cursor: "pointer",
+                        padding: '10px',
+                        borderRadius: '8px',
+                        fontSize: '18px',
+                        lineHeight: '1.6',
+                        color: isPlaying ? '#0f172a' : '#94a3b8',
+                        background: isPlaying ? '#fbbf24' : 'transparent',
+                        fontWeight: isPlaying ? 'bold' : 'normal',
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer'
                       }}
                       onClick={() => playRange(idx, idx)}
                     >
-                      <span
-                        style={{
-                          fontSize: "12px",
-                          marginRight: "8px",
-                          opacity: 0.7,
-                        }}
-                      >
-                        [{idx + 1}]
-                      </span>
+                      <span style={{ fontSize: '12px', marginRight: '8px', opacity: 0.7 }}>[{idx + 1}]</span>
                       {seg.transcript}
                     </p>
                   );
@@ -1324,152 +618,28 @@ export default function App() {
 
       {/* ================= TAB 3: SỔ TỪ VỰNG ================= */}
       {activeTab === "VOCAB" && (
-        <div
-          style={{
-            background: "#1e293b",
-            padding: "20px",
-            borderRadius: "12px",
-          }}
-        >
+        <div style={{ background: "#1e293b", padding: "20px", borderRadius: "12px" }}>
           <h3 style={{ color: "#a855f7", marginTop: 0 }}>➕ Thêm từ mới</h3>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "10px",
-              marginBottom: "30px",
-            }}
-          >
-            <input
-              value={newVocab.word}
-              onChange={(e) =>
-                setNewVocab({ ...newVocab, word: e.target.value })
-              }
-              placeholder="Từ vựng (VD: Melatonin)"
-              style={{
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #334155",
-                background: "#0f172a",
-                color: "#fff",
-                fontSize: "16px",
-              }}
-            />
-            <input
-              value={newVocab.meaning}
-              onChange={(e) =>
-                setNewVocab({ ...newVocab, meaning: e.target.value })
-              }
-              placeholder="Định nghĩa (VD: Hormone gây buồn ngủ)"
-              style={{
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #334155",
-                background: "#0f172a",
-                color: "#fff",
-                fontSize: "16px",
-              }}
-            />
-            <textarea
-              value={newVocab.example}
-              onChange={(e) =>
-                setNewVocab({ ...newVocab, example: e.target.value })
-              }
-              placeholder="Câu ví dụ (VD: Melatonin helps us sleep.)"
-              style={{
-                padding: "12px",
-                borderRadius: "8px",
-                border: "1px solid #334155",
-                background: "#0f172a",
-                color: "#fff",
-                fontSize: "16px",
-                height: "80px",
-                resize: "vertical",
-              }}
-            />
-            <button
-              onClick={saveVocab}
-              style={{
-                padding: "12px",
-                background: "#a855f7",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                fontWeight: "bold",
-                fontSize: "16px",
-                cursor: "pointer",
-              }}
-            >
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "30px" }}>
+            <input value={newVocab.word} onChange={(e) => setNewVocab({ ...newVocab, word: e.target.value })} placeholder="Từ vựng (VD: Melatonin)" style={{ padding: "12px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: "16px" }} />
+            <input value={newVocab.meaning} onChange={(e) => setNewVocab({ ...newVocab, meaning: e.target.value })} placeholder="Định nghĩa (VD: Hormone gây buồn ngủ)" style={{ padding: "12px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: "16px" }} />
+            <textarea value={newVocab.example} onChange={(e) => setNewVocab({ ...newVocab, example: e.target.value })} placeholder="Câu ví dụ (VD: Melatonin helps us sleep.)" style={{ padding: "12px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff", fontSize: "16px", height: "80px", resize: "vertical" }} />
+            <button onClick={saveVocab} style={{ padding: "12px", background: "#a855f7", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px", cursor: "pointer" }}>
               Lưu vào sổ 💾
             </button>
           </div>
 
           <h3 style={{ color: "#38bdf8" }}>📚 Danh sách từ vựng của bạn</h3>
           {vocabList.length === 0 ? (
-            <p style={{ color: "#64748b", fontStyle: "italic" }}>
-              Chưa có từ vựng nào được lưu.
-            </p>
+            <p style={{ color: "#64748b", fontStyle: "italic" }}>Chưa có từ vựng nào được lưu.</p>
           ) : (
-            <div
-              style={{ display: "flex", flexDirection: "column", gap: "15px" }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               {vocabList.map((v) => (
-                <div
-                  key={v.id}
-                  style={{
-                    background: "#0f172a",
-                    padding: "15px",
-                    borderRadius: "8px",
-                    borderLeft: "4px solid #a855f7",
-                    position: "relative",
-                  }}
-                >
-                  <button
-                    onClick={() => deleteVocab(v.id)}
-                    style={{
-                      position: "absolute",
-                      top: "10px",
-                      right: "10px",
-                      background: "transparent",
-                      border: "none",
-                      color: "#ef4444",
-                      fontSize: "18px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    ✖
-                  </button>
-                  <p
-                    style={{
-                      margin: "0 0 5px 0",
-                      fontSize: "18px",
-                      fontWeight: "bold",
-                      color: "#e2e8f0",
-                    }}
-                  >
-                    {v.word}
-                  </p>
-                  <p
-                    style={{
-                      margin: "0 0 8px 0",
-                      color: "#38bdf8",
-                      fontSize: "15px",
-                    }}
-                  >
-                    {v.meaning}
-                  </p>
-                  {v.example && (
-                    <p
-                      style={{
-                        margin: 0,
-                        fontStyle: "italic",
-                        color: "#94a3b8",
-                        fontSize: "14px",
-                      }}
-                    >
-                      Ví dụ: "{v.example}"
-                    </p>
-                  )}
+                <div key={v.id} style={{ background: "#0f172a", padding: "15px", borderRadius: "8px", borderLeft: "4px solid #a855f7", position: "relative" }}>
+                  <button onClick={() => deleteVocab(v.id)} style={{ position: "absolute", top: "10px", right: "10px", background: "transparent", border: "none", color: "#ef4444", fontSize: "18px", cursor: "pointer" }}>✖</button>
+                  <p style={{ margin: "0 0 5px 0", fontSize: "18px", fontWeight: "bold", color: "#e2e8f0" }}>{v.word}</p>
+                  <p style={{ margin: "0 0 8px 0", color: "#38bdf8", fontSize: "15px" }}>{v.meaning}</p>
+                  {v.example && <p style={{ margin: 0, fontStyle: "italic", color: "#94a3b8", fontSize: "14px" }}>Ví dụ: "{v.example}"</p>}
                 </div>
               ))}
             </div>
