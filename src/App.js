@@ -54,12 +54,18 @@ export default function App() {
   const [newJsonData, setNewJsonData] = useState(null);
   const [newFileName, setNewFileName] = useState("");
 
-  // --- STATE HỌC TẬP ---
+  // --- STATE HỌC TẬP & DICTATION ---
   const [input, setInput] = useState("");
   const [attemptsPerWord, setAttemptsPerWord] = useState({});
   const [isSuccess, setIsSuccess] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [activeTab, setActiveTab] = useState("LIBRARY");
+
+  // --- TÍNH NĂNG MỚI: TÙY CHỈNH ĐOẠN & FULL SCRIPT ---
+  const [customStartIdx, setCustomStartIdx] = useState(0);
+  const [customEndIdx, setCustomEndIdx] = useState(0);
+  const [showFullScript, setShowFullScript] = useState(false);
+  const [currentPlayingIdx, setCurrentPlayingIdx] = useState(-1); // Đánh dấu câu đang phát (Karaoke)
 
   // --- AUDIO CONTROLS & REFS ---
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -68,7 +74,7 @@ export default function App() {
   const timerRef = useRef(null);
   const resultBoxRef = useRef(null);
   const isTransitioning = useRef(false);
-  const autoPlayRef = useRef(false); // Cờ báo hiệu tự động phát an toàn
+  const autoPlayRef = useRef(false);
 
   // --- SỔ TỪ VỰNG ---
   const [vocabList, setVocabList] = useState([]);
@@ -78,7 +84,7 @@ export default function App() {
     example: "",
   });
 
-  // 1. KHỞI TẠO VÀ LƯU TRỮ
+  // KHỞI TẠO VÀ LƯU TRỮ
   useEffect(() => {
     const savedVocab = localStorage.getItem("my_vocab_book");
     if (savedVocab) setVocabList(JSON.parse(savedVocab));
@@ -105,18 +111,29 @@ export default function App() {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
   }, [playbackRate]);
 
-  // ==========================================
-  // LẤY DỮ LIỆU BÀI HIỆN TẠI
-  // ==========================================
+  // Cuộn tự động cho Full Script (Karaoke effect)
+  useEffect(() => {
+    if (showFullScript && currentPlayingIdx !== -1) {
+      const el = document.getElementById(`script-line-${currentPlayingIdx}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [currentPlayingIdx, showFullScript]);
+
   const activeLesson = library.find((l) => l.id === activeLessonId);
   const currentSegment = activeLesson
     ? activeLesson.data[activeLesson.currentIdx]
     : null;
   const currentAudioUrl = sessionAudioUrls[activeLessonId];
 
-  // ==========================================
+  // Khởi tạo lại Custom Dropdown khi đổi bài hoặc sang câu mới
+  useEffect(() => {
+    if (activeLesson) {
+      setCustomStartIdx(0);
+      setCustomEndIdx(activeLesson.currentIdx);
+    }
+  }, [activeLessonId, activeLesson?.currentIdx]);
+
   // AUTO-CHECK THỜI GIAN THỰC
-  // ==========================================
   useEffect(() => {
     if (!currentSegment || !input.trim()) return;
     const transcriptStr = normalize(currentSegment.transcript);
@@ -130,27 +147,46 @@ export default function App() {
   }, [input, currentSegment]);
 
   // ==========================================
-  // PHÁT NHẠC TÙY CHỈNH KHOẢNG CÁCH
+  // BỘ PHÁT AUDIO NÂNG CẤP (TRACKING & LOOPING MỌI DẢI)
   // ==========================================
   const playRange = useCallback(
     (startIdx, endIdx) => {
       if (!audioRef.current || !activeLesson) return;
-      const startSegment = activeLesson.data[startIdx];
-      const endSegment = activeLesson.data[endIdx];
+
+      // Chống lỗi nếu user chọn Start lớn hơn End
+      const safeStartIdx = Math.min(startIdx, endIdx);
+      const safeEndIdx = Math.max(startIdx, endIdx);
+
+      const startSegment = activeLesson.data[safeStartIdx];
+      const endSegment = activeLesson.data[safeEndIdx];
       if (!startSegment || !endSegment) return;
 
       clearInterval(timerRef.current);
       audioRef.current.currentTime = startSegment.start_time;
       audioRef.current.play().catch((e) => console.log("Lỗi:", e));
+      setCurrentPlayingIdx(safeStartIdx); // Khởi tạo highlight câu đầu tiên
 
       timerRef.current = setInterval(() => {
-        if (audioRef.current.currentTime >= endSegment.end_time) {
-          if (isAutoLoop && !isSuccess && startIdx === endIdx) {
+        if (!audioRef.current || !activeLesson) return;
+        const currentTime = audioRef.current.currentTime;
+
+        // Tính toán câu nào đang phát để highlight
+        const activeIdx = activeLesson.data.findIndex(
+          (s) => currentTime >= s.start_time && currentTime <= s.end_time
+        );
+        if (activeIdx !== -1) setCurrentPlayingIdx(activeIdx);
+
+        // Hết đoạn đã chọn
+        if (currentTime >= endSegment.end_time) {
+          if (isAutoLoop && !isSuccess) {
+            // Nếu bật lặp lại -> Vòng về đầu đoạn
             audioRef.current.currentTime = startSegment.start_time;
             audioRef.current.play();
           } else {
+            // Không lặp -> Dừng phát, tắt highlight
             audioRef.current.pause();
             clearInterval(timerRef.current);
+            setCurrentPlayingIdx(-1);
           }
         }
       }, 100);
@@ -173,7 +209,7 @@ export default function App() {
   };
 
   // ==========================================
-  // BẢN VÁ LỖI KẸT CÂU (TRANSITION ENGINE)
+  // TRANSITION ENGINE
   // ==========================================
   const resetDictationState = () => {
     setInput("");
@@ -190,15 +226,13 @@ export default function App() {
     );
   };
 
-  // Hàm chuyển câu đa năng (dùng cho cả nút Next và Dropdown)
   const jumpToSentence = (newIdx) => {
     if (!activeLesson) return;
     updateProgress(activeLesson.id, newIdx);
     resetDictationState();
-    autoPlayRef.current = true; // Kích hoạt cờ tự động phát
+    autoPlayRef.current = true;
   };
 
-  // Khi component nhận diện dữ liệu câu mới đã nạp xong, nó mới phát nhạc
   useEffect(() => {
     if (autoPlayRef.current && currentSegment) {
       autoPlayRef.current = false;
@@ -217,13 +251,13 @@ export default function App() {
       jumpToSentence(activeLesson.currentIdx + 1);
       setTimeout(() => {
         isTransitioning.current = false;
-      }, 500); // Mở khóa sau 0.5s
+      }, 500);
     } else {
       alert("🎉 Bạn đã hoàn thành toàn bộ bài nghe này!");
     }
   };
 
-  // --- CÁC HÀM XỬ LÝ KHÁC ---
+  // --- HÀM XỬ LÝ KHÁC (UPLOAD, KIỂM TRA, V.V) ---
   const handleNewAudioUpload = (e) => {
     if (e.target.files[0])
       setNewAudioUrl(URL.createObjectURL(e.target.files[0]));
@@ -237,13 +271,12 @@ export default function App() {
         try {
           setNewJsonData(JSON.parse(event.target.result));
         } catch (error) {
-          alert("Lỗi đọc file JSON!");
+          alert("Lỗi JSON!");
         }
       };
       reader.readAsText(file);
     }
   };
-
   const createNewLesson = () => {
     if (!newJsonData || !newAudioUrl) return;
     const newLesson = {
@@ -261,9 +294,8 @@ export default function App() {
     setActiveTab("DICTATION");
     resetDictationState();
   };
-
   const deleteLesson = (id) => {
-    if (window.confirm("Bạn có chắc muốn xóa bài học này khỏi thư viện?")) {
+    if (window.confirm("Bạn có chắc muốn xóa?")) {
       setLibrary((prev) => prev.filter((l) => l.id !== id));
       if (activeLessonId === id) {
         setActiveLessonId(null);
@@ -271,19 +303,16 @@ export default function App() {
       }
     }
   };
-
   const handleCheck = () => {
     if (!input.trim() || !currentSegment) return;
     const transcriptStr = normalize(currentSegment.transcript);
     const userStr = normalize(input);
-
     if (transcriptStr === userStr) {
       setIsSuccess(true);
       setShowFeedback(true);
       if (audioRef.current) audioRef.current.pause();
       return;
     }
-
     const transcriptWords = transcriptStr.split(/\s+/).filter(Boolean);
     const userWords = userStr.split(/\s+/).filter(Boolean);
     let errorIdx = -1;
@@ -295,7 +324,6 @@ export default function App() {
     }
     if (errorIdx === -1 && userWords.length < transcriptWords.length)
       errorIdx = userWords.length;
-
     setAttemptsPerWord((prev) => ({
       ...prev,
       [errorIdx]: (prev[errorIdx] || 0) + 1,
@@ -303,7 +331,6 @@ export default function App() {
     setIsSuccess(false);
     setShowFeedback(true);
   };
-
   const handleSurrenderWord = () => {
     const rawTranscriptWords = currentSegment.transcript
       .split(/\s+/)
@@ -318,7 +345,6 @@ export default function App() {
     }
     if (errorIdx === -1 && userWords.length < rawTranscriptWords.length)
       errorIdx = userWords.length;
-
     if (errorIdx !== -1) {
       const correctWord = rawTranscriptWords[errorIdx].replace(
         /[^a-zA-Z0-9'’]/g,
@@ -330,7 +356,6 @@ export default function App() {
       setTimeout(() => handleCheck(), 100);
     }
   };
-
   const saveVocab = () => {
     if (!newVocab.word) return;
     setVocabList([{ ...newVocab, id: Date.now() }, ...vocabList]);
@@ -346,7 +371,7 @@ export default function App() {
     <div
       style={{
         padding: "20px",
-        maxWidth: "900px",
+        maxWidth: "1000px",
         margin: "0 auto",
         fontFamily: "sans-serif",
         backgroundColor: "#0f172a",
@@ -354,7 +379,7 @@ export default function App() {
         minHeight: "100vh",
       }}
     >
-      {/* TABS HEADER CHÍNH */}
+      {/* HEADER TABS */}
       <div
         style={{
           display: "flex",
@@ -384,7 +409,7 @@ export default function App() {
         <button
           onClick={() => {
             if (activeLessonId) setActiveTab("DICTATION");
-            else alert("Vui lòng chọn 1 bài học từ Thư Viện trước!");
+            else alert("Chọn bài học trước!");
           }}
           style={{
             flex: 1,
@@ -423,6 +448,7 @@ export default function App() {
 
       {/* ================= TAB 1: THƯ VIỆN ================= */}
       {activeTab === "LIBRARY" && (
+        // (Giữ nguyên cấu trúc Tab Library cũ)
         <div>
           <div
             style={{
@@ -619,26 +645,25 @@ export default function App() {
         </div>
       )}
 
-      {/* ================= TAB 2: LUYỆN NGHE (DICTATION) ================= */}
+      {/* ================= TAB 2: LUYỆN NGHE & FULL SCRIPT ================= */}
       {activeTab === "DICTATION" && activeLesson && (
-        <>
+        <div style={{ display: "flex", gap: "20px", flexDirection: "column" }}>
           <audio ref={audioRef} src={currentAudioUrl} />
 
+          {/* HÀNG HEADER */}
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              marginBottom: "15px",
+              marginBottom: "5px",
             }}
           >
             <span
-              style={{ fontSize: "16px", color: "#94a3b8", fontWeight: "bold" }}
+              style={{ fontSize: "18px", color: "#94a3b8", fontWeight: "bold" }}
             >
               {activeLesson.name}
             </span>
-
-            {/* THAY ĐỔI: TẠO DROPDOWN CHỌN CÂU */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span
                 style={{
@@ -647,7 +672,7 @@ export default function App() {
                   fontWeight: "bold",
                 }}
               >
-                Câu
+                Đang làm câu
               </span>
               <select
                 value={activeLesson.currentIdx}
@@ -682,14 +707,15 @@ export default function App() {
             </div>
           </div>
 
+          {/* BẢNG ĐIỀU KHIỂN AUDIO TOÀN NĂNG */}
           <div
             style={{
               background: "#1e293b",
               padding: "15px",
               borderRadius: "12px",
-              marginBottom: "20px",
             }}
           >
+            {/* Khu vực phát thông thường */}
             <div
               style={{
                 display: "flex",
@@ -708,11 +734,13 @@ export default function App() {
                   border: "none",
                   fontWeight: "bold",
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
                 ▶ Phát câu này
               </button>
-
               <button
                 onClick={() =>
                   playRange(
@@ -730,9 +758,8 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                🔗 Nối câu trước (n-1)
+                🔗 Nghe (n-1) & (n)
               </button>
-
               <button
                 onClick={() => playRange(0, activeLesson.currentIdx)}
                 style={{
@@ -745,9 +772,8 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                ⏮ Nghe từ câu 1
+                ⏮ Nghe từ Câu 1 đến (n)
               </button>
-
               <button
                 onClick={rewindAudio}
                 style={{
@@ -763,13 +789,90 @@ export default function App() {
               </button>
             </div>
 
+            {/* Khu vực Tùy chỉnh đoạn nghe */}
             <div
               style={{
                 display: "flex",
-                gap: "15px",
+                flexWrap: "wrap",
                 alignItems: "center",
-                borderTop: "1px solid #334155",
-                paddingTop: "10px",
+                gap: "10px",
+                paddingBottom: "15px",
+                borderBottom: "1px solid #334155",
+                marginBottom: "15px",
+              }}
+            >
+              <span
+                style={{
+                  color: "#94a3b8",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                }}
+              >
+                🔀 Tùy chọn đoạn:
+              </span>
+              <span style={{ color: "#e2e8f0", fontSize: "14px" }}>Từ</span>
+              <select
+                value={customStartIdx}
+                onChange={(e) =>
+                  setCustomStartIdx(parseInt(e.target.value, 10))
+                }
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  background: "#0f172a",
+                  color: "#a855f7",
+                  border: "1px solid #334155",
+                  outline: "none",
+                }}
+              >
+                {activeLesson.data.map((_, idx) => (
+                  <option key={idx} value={idx}>
+                    Câu {idx + 1}
+                  </option>
+                ))}
+              </select>
+              <span style={{ color: "#e2e8f0", fontSize: "14px" }}>đến</span>
+              <select
+                value={customEndIdx}
+                onChange={(e) => setCustomEndIdx(parseInt(e.target.value, 10))}
+                style={{
+                  padding: "4px 8px",
+                  borderRadius: "6px",
+                  background: "#0f172a",
+                  color: "#a855f7",
+                  border: "1px solid #334155",
+                  outline: "none",
+                }}
+              >
+                {activeLesson.data.map((_, idx) => (
+                  <option key={idx} value={idx}>
+                    Câu {idx + 1}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => playRange(customStartIdx, customEndIdx)}
+                style={{
+                  padding: "6px 15px",
+                  borderRadius: "6px",
+                  background: "#a855f7",
+                  color: "#fff",
+                  border: "none",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                }}
+              >
+                ▶ Phát đoạn chọn
+              </button>
+            </div>
+
+            {/* Khu vực Settings */}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "20px",
+                alignItems: "center",
               }}
             >
               <label
@@ -779,7 +882,8 @@ export default function App() {
                   gap: "5px",
                   cursor: "pointer",
                   fontSize: "14px",
-                  color: "#94a3b8",
+                  color: "#10b981",
+                  fontWeight: "bold",
                 }}
               >
                 <input
@@ -787,246 +891,344 @@ export default function App() {
                   checked={isAutoLoop}
                   onChange={(e) => setIsAutoLoop(e.target.checked)}
                 />
-                🔁 Tự lặp (chỉ áp dụng Phát câu này)
+                🔁 Tự động lặp lại (Áp dụng mọi kiểu nghe)
               </label>
-              <select
-                value={playbackRate}
-                onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
-                style={{
-                  padding: "6px",
-                  borderRadius: "6px",
-                  background: "#0f172a",
-                  color: "#38bdf8",
-                  border: "1px solid #334155",
-                  outline: "none",
-                }}
-              >
-                <option value={0.75}>🐢 0.75x</option>
-                <option value={0.85}>🚶 0.85x</option>
-                <option value={1}>🏃 1.0x</option>
-                <option value={1.25}>🚀 1.25x</option>
-                <option value={1.5}>🔥 1.5x</option>
-              </select>
-            </div>
-          </div>
 
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                isSuccess ? nextSentence() : handleCheck();
-              }
-            }}
-            placeholder="Gõ đáp án vào đây... (Hệ thống tự động chấm điểm)"
-            style={{
-              width: "100%",
-              height: "100px",
-              fontSize: "18px",
-              padding: "15px",
-              borderRadius: "12px",
-              border: isSuccess ? "2px solid #22c55e" : "2px solid #334155",
-              background: "#1e293b",
-              color: "#fff",
-              outline: "none",
-              resize: "vertical",
-              transition: "border 0.3s",
-            }}
-          />
-
-          <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
-            <button
-              onClick={isSuccess ? nextSentence : handleCheck}
-              style={{
-                flex: 2,
-                padding: "15px",
-                fontSize: "18px",
-                background: isSuccess ? "#3b82f6" : "#22c55e",
-                color: "white",
-                border: "none",
-                borderRadius: "12px",
-                cursor: "pointer",
-                fontWeight: "bold",
-              }}
-            >
-              {isSuccess
-                ? "Tiếp tục ⮕ (Hoặc nhấn Enter)"
-                : "Kiểm tra lỗi ✓ (Enter)"}
-            </button>
-            {!isSuccess && (
-              <button
-                onClick={handleSurrenderWord}
+              <label
                 style={{
-                  flex: 1,
-                  padding: "15px",
-                  fontSize: "16px",
-                  background: "#334155",
-                  color: "#fca5a5",
-                  border: "none",
-                  borderRadius: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                   cursor: "pointer",
+                  fontSize: "14px",
+                  color: "#fbbf24",
                   fontWeight: "bold",
                 }}
               >
-                🏳️ Cho xin 1 từ
-              </button>
-            )}
+                <input
+                  type="checkbox"
+                  checked={showFullScript}
+                  onChange={(e) => setShowFullScript(e.target.checked)}
+                />
+                📜 Hiện Full Script (Karaoke)
+              </label>
+
+              <div style={{ marginLeft: "auto" }}>
+                <select
+                  value={playbackRate}
+                  onChange={(e) => setPlaybackRate(parseFloat(e.target.value))}
+                  style={{
+                    padding: "6px",
+                    borderRadius: "6px",
+                    background: "#0f172a",
+                    color: "#38bdf8",
+                    border: "1px solid #334155",
+                    outline: "none",
+                  }}
+                >
+                  <option value={0.75}>🐢 Tốc độ: 0.75x</option>
+                  <option value={0.85}>🚶 Tốc độ: 0.85x</option>
+                  <option value={1}>🏃 Tốc độ: 1.0x</option>
+                  <option value={1.25}>🚀 Tốc độ: 1.25x</option>
+                  <option value={1.5}>🔥 Tốc độ: 1.5x</option>
+                </select>
+              </div>
+            </div>
           </div>
 
+          {/* VÙNG LÀM VIỆC (CHIA 2 CỘT NẾU MỞ FULL SCRIPT) */}
           <div
-            ref={resultBoxRef}
             style={{
-              marginTop: "20px",
-              border: "2px solid #334155",
-              padding: "20px",
-              borderRadius: "12px",
-              background: "#1e293b",
-              minHeight: "120px",
-              maxHeight: "300px",
-              overflowY: "auto",
+              display: "grid",
+              gridTemplateColumns: showFullScript ? "1fr 1fr" : "1fr",
+              gap: "20px",
+              transition: "all 0.3s",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "10px",
-                fontSize: "20px",
-                lineHeight: "1.8",
-              }}
-            >
-              {!showFeedback && (
-                <span style={{ color: "#64748b", fontStyle: "italic" }}>
-                  Bản dịch sẽ tự động hiện khi bạn hoàn thành câu...
-                </span>
-              )}
+            {/* CỘT 1: DICTATION CHÍNH */}
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    isSuccess ? nextSentence() : handleCheck();
+                  }
+                }}
+                placeholder="Gõ đáp án vào đây... (Hệ thống tự động chấm điểm)"
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  fontSize: "18px",
+                  padding: "15px",
+                  borderRadius: "12px",
+                  border: isSuccess ? "2px solid #22c55e" : "2px solid #334155",
+                  background: "#1e293b",
+                  color: "#fff",
+                  outline: "none",
+                  resize: "vertical",
+                  transition: "border 0.3s",
+                }}
+              />
 
-              {showFeedback &&
-                currentSegment &&
-                currentSegment.transcript
-                  .split(/\s+/)
-                  .filter(Boolean)
-                  .map((word, i) => {
-                    const userWords = input.trim().split(/\s+/).filter(Boolean);
-                    const rawTranscriptWords = currentSegment.transcript
-                      .split(/\s+/)
-                      .filter(Boolean);
-                    let currentErrorIdx = -1;
-                    for (let k = 0; k < rawTranscriptWords.length; k++) {
-                      if (
-                        normalize(userWords[k]) !==
-                        normalize(rawTranscriptWords[k])
-                      ) {
-                        currentErrorIdx = k;
-                        break;
-                      }
-                    }
-                    if (
-                      currentErrorIdx === -1 &&
-                      userWords.length < rawTranscriptWords.length
-                    )
-                      currentErrorIdx = userWords.length;
+              <div style={{ display: "flex", gap: "10px", marginTop: "15px" }}>
+                <button
+                  onClick={isSuccess ? nextSentence : handleCheck}
+                  style={{
+                    flex: 2,
+                    padding: "15px",
+                    fontSize: "18px",
+                    background: isSuccess ? "#3b82f6" : "#22c55e",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "12px",
+                    cursor: "pointer",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {isSuccess
+                    ? "Tiếp tục ⮕ (Hoặc nhấn Enter)"
+                    : "Kiểm tra lỗi ✓ (Enter)"}
+                </button>
+                {!isSuccess && (
+                  <button
+                    onClick={handleSurrenderWord}
+                    style={{
+                      flex: 1,
+                      padding: "15px",
+                      fontSize: "16px",
+                      background: "#334155",
+                      color: "#fca5a5",
+                      border: "none",
+                      borderRadius: "12px",
+                      cursor: "pointer",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    🏳️ Cho xin 1 từ
+                  </button>
+                )}
+              </div>
 
-                    if (i < currentErrorIdx || currentErrorIdx === -1) {
-                      return (
-                        <span
-                          key={i}
-                          style={{ color: "#22c55e", fontWeight: "bold" }}
-                        >
-                          {word}
-                        </span>
-                      );
-                    }
-                    if (i === currentErrorIdx && !isSuccess) {
-                      const attempts = attemptsPerWord[i] || 0;
-                      const cleanWord = word.replace(/[^a-zA-Z0-9'’]/g, "");
-                      const revealCount = Math.min(
-                        attempts > 0 ? attempts - 1 : 0,
-                        cleanWord.length
-                      );
-                      let hintStr = cleanWord.substring(0, revealCount);
-                      for (let j = revealCount; j < cleanWord.length; j++)
-                        hintStr += "_";
-                      const wrongUserWord = userWords[i];
-
-                      return (
-                        <span
-                          key={i}
-                          style={{
-                            background: "#450a0a",
-                            border: "1px solid #f87171",
-                            padding: "2px 10px",
-                            borderRadius: "6px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "8px",
-                          }}
-                        >
-                          {wrongUserWord && (
-                            <span
-                              style={{
-                                color: "#ef4444",
-                                textDecoration: "line-through",
-                                fontSize: "16px",
-                              }}
-                            >
-                              {wrongUserWord}
-                            </span>
-                          )}
-                          <span
-                            style={{
-                              color: "#fbbf24",
-                              fontFamily: "monospace",
-                              fontWeight: "bold",
-                              letterSpacing: "2px",
-                            }}
-                          >
-                            {hintStr}
-                          </span>
-                        </span>
-                      );
-                    }
-                    if (i > currentErrorIdx)
-                      return (
-                        <span key={i} style={{ color: "#475569" }}>
-                          ___
-                        </span>
-                      );
-                    return null;
-                  })}
-            </div>
-
-            {isSuccess && (
               <div
+                ref={resultBoxRef}
                 style={{
                   marginTop: "20px",
-                  borderTop: "2px dashed #475569",
-                  paddingTop: "15px",
+                  border: "2px solid #334155",
+                  padding: "20px",
+                  borderRadius: "12px",
+                  background: "#1e293b",
+                  minHeight: "120px",
+                  maxHeight: showFullScript ? "250px" : "300px",
+                  overflowY: "auto",
                 }}
               >
-                <p
+                <div
                   style={{
-                    color: "#22c55e",
-                    fontWeight: "bold",
-                    fontSize: "18px",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: "10px",
+                    fontSize: "20px",
+                    lineHeight: "1.8",
                   }}
                 >
-                  🎉 Hoàn hảo!
-                </p>
-                <p
+                  {!showFeedback && (
+                    <span style={{ color: "#64748b", fontStyle: "italic" }}>
+                      Bản dịch sẽ tự động hiện khi hoàn thành...
+                    </span>
+                  )}
+
+                  {showFeedback &&
+                    currentSegment &&
+                    currentSegment.transcript
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .map((word, i) => {
+                        const userWords = input
+                          .trim()
+                          .split(/\s+/)
+                          .filter(Boolean);
+                        const rawTranscriptWords = currentSegment.transcript
+                          .split(/\s+/)
+                          .filter(Boolean);
+                        let currentErrorIdx = -1;
+                        for (let k = 0; k < rawTranscriptWords.length; k++) {
+                          if (
+                            normalize(userWords[k]) !==
+                            normalize(rawTranscriptWords[k])
+                          ) {
+                            currentErrorIdx = k;
+                            break;
+                          }
+                        }
+                        if (
+                          currentErrorIdx === -1 &&
+                          userWords.length < rawTranscriptWords.length
+                        )
+                          currentErrorIdx = userWords.length;
+
+                        if (i < currentErrorIdx || currentErrorIdx === -1)
+                          return (
+                            <span
+                              key={i}
+                              style={{ color: "#22c55e", fontWeight: "bold" }}
+                            >
+                              {word}
+                            </span>
+                          );
+
+                        if (i === currentErrorIdx && !isSuccess) {
+                          const attempts = attemptsPerWord[i] || 0;
+                          const cleanWord = word.replace(/[^a-zA-Z0-9'’]/g, "");
+                          const revealCount = Math.min(
+                            attempts > 0 ? attempts - 1 : 0,
+                            cleanWord.length
+                          );
+                          let hintStr = cleanWord.substring(0, revealCount);
+                          for (let j = revealCount; j < cleanWord.length; j++)
+                            hintStr += "_";
+                          return (
+                            <span
+                              key={i}
+                              style={{
+                                background: "#450a0a",
+                                border: "1px solid #f87171",
+                                padding: "2px 10px",
+                                borderRadius: "6px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "8px",
+                              }}
+                            >
+                              {userWords[i] && (
+                                <span
+                                  style={{
+                                    color: "#ef4444",
+                                    textDecoration: "line-through",
+                                    fontSize: "16px",
+                                  }}
+                                >
+                                  {userWords[i]}
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  color: "#fbbf24",
+                                  fontFamily: "monospace",
+                                  fontWeight: "bold",
+                                  letterSpacing: "2px",
+                                }}
+                              >
+                                {hintStr}
+                              </span>
+                            </span>
+                          );
+                        }
+                        return (
+                          <span key={i} style={{ color: "#475569" }}>
+                            ___
+                          </span>
+                        );
+                      })}
+                </div>
+                {isSuccess && (
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      borderTop: "2px dashed #475569",
+                      paddingTop: "15px",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: "#22c55e",
+                        fontWeight: "bold",
+                        fontSize: "18px",
+                      }}
+                    >
+                      🎉 Hoàn hảo!
+                    </p>
+                    <p
+                      style={{
+                        color: "#a78bfa",
+                        fontStyle: "italic",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      🇻🇳 Dịch: {currentSegment?.translation}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CỘT 2: FULL SCRIPT (Chỉ hiện khi toggle bật) */}
+            {showFullScript && (
+              <div
+                style={{
+                  background: "#1e293b",
+                  border: "2px solid #334155",
+                  borderRadius: "12px",
+                  padding: "20px",
+                  maxHeight: "400px",
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
+                <h4
                   style={{
-                    color: "#a78bfa",
-                    fontStyle: "italic",
-                    marginBottom: "10px",
+                    margin: "0 0 10px 0",
+                    color: "#fbbf24",
+                    borderBottom: "1px solid #334155",
+                    paddingBottom: "10px",
+                    position: "sticky",
+                    top: "-20px",
+                    background: "#1e293b",
+                    zIndex: 10,
                   }}
                 >
-                  🇻🇳 Dịch: {currentSegment?.translation}
-                </p>
+                  📜 Full Script Tracker
+                </h4>
+                {activeLesson.data.map((seg, idx) => {
+                  const isPlaying = idx === currentPlayingIdx;
+                  return (
+                    <p
+                      key={idx}
+                      id={`script-line-${idx}`}
+                      style={{
+                        margin: 0,
+                        padding: "10px",
+                        borderRadius: "8px",
+                        fontSize: "18px",
+                        lineHeight: "1.6",
+                        color: isPlaying ? "#0f172a" : "#94a3b8",
+                        background: isPlaying ? "#fbbf24" : "transparent",
+                        fontWeight: isPlaying ? "bold" : "normal",
+                        transition: "all 0.3s ease",
+                        cursor: "pointer",
+                      }}
+                      onClick={() => playRange(idx, idx)} // Bấm vào dòng nào phát đoạn đó luôn!
+                    >
+                      <span
+                        style={{
+                          fontSize: "12px",
+                          marginRight: "8px",
+                          opacity: 0.7,
+                        }}
+                      >
+                        [{idx + 1}]
+                      </span>
+                      {seg.transcript}
+                    </p>
+                  );
+                })}
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {/* ================= TAB 3: SỔ TỪ VỰNG ================= */}
