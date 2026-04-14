@@ -1,5 +1,47 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 
+// ==========================================
+// KÉT SẮT BÍ MẬT: LƯU TRỮ FILE AUDIO VĨNH VIỄN (INDEXED-DB)
+// ==========================================
+const audioDB = {
+  init() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("DictationAudioDB", 1);
+      request.onupgradeneeded = (e) =>
+        e.target.result.createObjectStore("audios");
+      request.onsuccess = (e) => resolve(e.target.result);
+      request.onerror = (e) => reject(e.target.error);
+    });
+  },
+  async save(id, blob) {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("audios", "readwrite");
+      tx.objectStore("audios").put(blob, id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async get(id) {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("audios", "readonly");
+      const request = tx.objectStore("audios").get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  },
+  async delete(id) {
+    const db = await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction("audios", "readwrite");
+      tx.objectStore("audios").delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+};
+
 // --- BỘ LỌC TỪ VIẾT TẮT ---
 const expandContractions = (str) => {
   let s = str?.toLowerCase() || "";
@@ -50,9 +92,10 @@ export default function App() {
   const [library, setLibrary] = useState([]);
   const [activeLessonId, setActiveLessonId] = useState(null);
   const [sessionAudioUrls, setSessionAudioUrls] = useState({});
-  const [newAudioUrl, setNewAudioUrl] = useState(null);
+  const [newAudioFile, setNewAudioFile] = useState(null); // Giữ file thật để lưu vào Database
   const [newJsonData, setNewJsonData] = useState(null);
   const [newFileName, setNewFileName] = useState("");
+  const [isDBLoading, setIsDBLoading] = useState(true); // Trạng thái đang móc file từ Database
 
   // --- STATE HỌC TẬP & DICTATION ---
   const [input, setInput] = useState("");
@@ -61,11 +104,11 @@ export default function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [activeTab, setActiveTab] = useState("LIBRARY");
 
-  // --- TÍNH NĂNG MỚI: TÙY CHỈNH ĐOẠN & FULL SCRIPT ---
+  // --- STATE TÙY CHỈNH ĐOẠN & FULL SCRIPT ---
   const [customStartIdx, setCustomStartIdx] = useState(0);
   const [customEndIdx, setCustomEndIdx] = useState(0);
   const [showFullScript, setShowFullScript] = useState(false);
-  const [currentPlayingIdx, setCurrentPlayingIdx] = useState(-1); // Đánh dấu câu đang phát (Karaoke)
+  const [currentPlayingIdx, setCurrentPlayingIdx] = useState(-1);
 
   // --- AUDIO CONTROLS & REFS ---
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -84,14 +127,38 @@ export default function App() {
     example: "",
   });
 
-  // KHỞI TẠO VÀ LƯU TRỮ
+  // 1. TẢI DỮ LIỆU TỪ TRÌNH DUYỆT (KÈM AUDIO TỪ DATABASE)
   useEffect(() => {
-    const savedVocab = localStorage.getItem("my_vocab_book");
-    if (savedVocab) setVocabList(JSON.parse(savedVocab));
-    const savedLibrary = localStorage.getItem("my_dictation_library");
-    if (savedLibrary) setLibrary(JSON.parse(savedLibrary));
+    const loadSavedData = async () => {
+      const savedVocab = localStorage.getItem("my_vocab_book");
+      if (savedVocab) setVocabList(JSON.parse(savedVocab));
+
+      const savedLibrary = localStorage.getItem("my_dictation_library");
+      if (savedLibrary) {
+        const parsedLib = JSON.parse(savedLibrary);
+        setLibrary(parsedLib);
+
+        // Tự động móc file âm thanh từ Két sắt (IndexedDB)
+        const loadedUrls = {};
+        for (const lesson of parsedLib) {
+          try {
+            const audioBlob = await audioDB.get(lesson.id);
+            if (audioBlob) {
+              loadedUrls[lesson.id] = URL.createObjectURL(audioBlob);
+            }
+          } catch (err) {
+            console.log("Không tìm thấy audio cho bài:", lesson.id);
+          }
+        }
+        setSessionAudioUrls(loadedUrls);
+      }
+      setIsDBLoading(false);
+    };
+
+    loadSavedData();
   }, []);
 
+  // LƯU TIẾN ĐỘ
   useEffect(
     () => localStorage.setItem("my_vocab_book", JSON.stringify(vocabList)),
     [vocabList]
@@ -101,6 +168,7 @@ export default function App() {
     [library]
   );
 
+  // CUỘN KHUNG
   useEffect(() => {
     if (showFeedback && resultBoxRef.current) {
       resultBoxRef.current.scrollTop = resultBoxRef.current.scrollHeight;
@@ -108,16 +176,15 @@ export default function App() {
   }, [input, showFeedback]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
-  }, [playbackRate]);
-
-  // Cuộn tự động cho Full Script (Karaoke effect)
-  useEffect(() => {
     if (showFullScript && currentPlayingIdx !== -1) {
       const el = document.getElementById(`script-line-${currentPlayingIdx}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [currentPlayingIdx, showFullScript]);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   const activeLesson = library.find((l) => l.id === activeLessonId);
   const currentSegment = activeLesson
@@ -125,7 +192,6 @@ export default function App() {
     : null;
   const currentAudioUrl = sessionAudioUrls[activeLessonId];
 
-  // Khởi tạo lại Custom Dropdown khi đổi bài hoặc sang câu mới
   useEffect(() => {
     if (activeLesson) {
       setCustomStartIdx(0);
@@ -133,7 +199,7 @@ export default function App() {
     }
   }, [activeLessonId, activeLesson?.currentIdx]);
 
-  // AUTO-CHECK THỜI GIAN THỰC
+  // AUTO-CHECK
   useEffect(() => {
     if (!currentSegment || !input.trim()) return;
     const transcriptStr = normalize(currentSegment.transcript);
@@ -147,13 +213,11 @@ export default function App() {
   }, [input, currentSegment]);
 
   // ==========================================
-  // BỘ PHÁT AUDIO NÂNG CẤP (TRACKING & LOOPING MỌI DẢI)
+  // PHÁT AUDIO NGỮ CẢNH
   // ==========================================
   const playRange = useCallback(
     (startIdx, endIdx) => {
       if (!audioRef.current || !activeLesson) return;
-
-      // Chống lỗi nếu user chọn Start lớn hơn End
       const safeStartIdx = Math.min(startIdx, endIdx);
       const safeEndIdx = Math.max(startIdx, endIdx);
 
@@ -164,26 +228,22 @@ export default function App() {
       clearInterval(timerRef.current);
       audioRef.current.currentTime = startSegment.start_time;
       audioRef.current.play().catch((e) => console.log("Lỗi:", e));
-      setCurrentPlayingIdx(safeStartIdx); // Khởi tạo highlight câu đầu tiên
+      setCurrentPlayingIdx(safeStartIdx);
 
       timerRef.current = setInterval(() => {
         if (!audioRef.current || !activeLesson) return;
         const currentTime = audioRef.current.currentTime;
 
-        // Tính toán câu nào đang phát để highlight
         const activeIdx = activeLesson.data.findIndex(
           (s) => currentTime >= s.start_time && currentTime <= s.end_time
         );
         if (activeIdx !== -1) setCurrentPlayingIdx(activeIdx);
 
-        // Hết đoạn đã chọn
         if (currentTime >= endSegment.end_time) {
           if (isAutoLoop && !isSuccess) {
-            // Nếu bật lặp lại -> Vòng về đầu đoạn
             audioRef.current.currentTime = startSegment.start_time;
             audioRef.current.play();
           } else {
-            // Không lặp -> Dừng phát, tắt highlight
             audioRef.current.pause();
             clearInterval(timerRef.current);
             setCurrentPlayingIdx(-1);
@@ -209,7 +269,7 @@ export default function App() {
   };
 
   // ==========================================
-  // TRANSITION ENGINE
+  // QUA CÂU
   // ==========================================
   const resetDictationState = () => {
     setInput("");
@@ -257,11 +317,13 @@ export default function App() {
     }
   };
 
-  // --- HÀM XỬ LÝ KHÁC (UPLOAD, KIỂM TRA, V.V) ---
+  // ==========================================
+  // XỬ LÝ UPLOAD VÀ TẠO BÀI MỚI (LƯU VÀO KÉT SẮT)
+  // ==========================================
   const handleNewAudioUpload = (e) => {
-    if (e.target.files[0])
-      setNewAudioUrl(URL.createObjectURL(e.target.files[0]));
+    if (e.target.files[0]) setNewAudioFile(e.target.files[0]); // Giữ nguyên file thực tế
   };
+
   const handleNewJsonUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -277,25 +339,42 @@ export default function App() {
       reader.readAsText(file);
     }
   };
-  const createNewLesson = () => {
-    if (!newJsonData || !newAudioUrl) return;
+
+  const createNewLesson = async () => {
+    if (!newJsonData || !newAudioFile) return;
+
+    const newId = Date.now().toString();
     const newLesson = {
-      id: Date.now().toString(),
+      id: newId,
       name: newFileName || "Bài học mới",
       data: newJsonData,
       currentIdx: 0,
     };
+
+    // Lưu File Audio vào Két sắt IndexedDB
+    try {
+      await audioDB.save(newId, newAudioFile);
+    } catch (err) {
+      alert("Lỗi khi lưu Audio vào bộ nhớ thiết bị!");
+    }
+
     setLibrary((prev) => [newLesson, ...prev]);
-    setSessionAudioUrls((prev) => ({ ...prev, [newLesson.id]: newAudioUrl }));
+    setSessionAudioUrls((prev) => ({
+      ...prev,
+      [newId]: URL.createObjectURL(newAudioFile),
+    }));
+
     setNewJsonData(null);
-    setNewAudioUrl(null);
+    setNewAudioFile(null);
     setNewFileName("");
-    setActiveLessonId(newLesson.id);
+    setActiveLessonId(newId);
     setActiveTab("DICTATION");
     resetDictationState();
   };
-  const deleteLesson = (id) => {
-    if (window.confirm("Bạn có chắc muốn xóa?")) {
+
+  const deleteLesson = async (id) => {
+    if (window.confirm("Bạn có chắc muốn xóa vĩnh viễn bài này?")) {
+      await audioDB.delete(id); // Xóa file rác trong két sắt
       setLibrary((prev) => prev.filter((l) => l.id !== id));
       if (activeLessonId === id) {
         setActiveLessonId(null);
@@ -303,6 +382,8 @@ export default function App() {
       }
     }
   };
+
+  // KIỂM TRA ĐÁP ÁN
   const handleCheck = () => {
     if (!input.trim() || !currentSegment) return;
     const transcriptStr = normalize(currentSegment.transcript);
@@ -331,6 +412,7 @@ export default function App() {
     setIsSuccess(false);
     setShowFeedback(true);
   };
+
   const handleSurrenderWord = () => {
     const rawTranscriptWords = currentSegment.transcript
       .split(/\s+/)
@@ -356,6 +438,7 @@ export default function App() {
       setTimeout(() => handleCheck(), 100);
     }
   };
+
   const saveVocab = () => {
     if (!newVocab.word) return;
     setVocabList([{ ...newVocab, id: Date.now() }, ...vocabList]);
@@ -363,6 +446,14 @@ export default function App() {
   };
   const deleteVocab = (id) =>
     setVocabList(vocabList.filter((v) => v.id !== id));
+
+  if (isDBLoading) {
+    return (
+      <div style={{ color: "white", textAlign: "center", marginTop: "50px" }}>
+        Đang tải dữ liệu từ máy...
+      </div>
+    );
+  }
 
   // ==========================================
   // RENDER GIAO DIỆN CHÍNH
@@ -448,7 +539,6 @@ export default function App() {
 
       {/* ================= TAB 1: THƯ VIỆN ================= */}
       {activeTab === "LIBRARY" && (
-        // (Giữ nguyên cấu trúc Tab Library cũ)
         <div>
           <div
             style={{
@@ -500,18 +590,18 @@ export default function App() {
             </div>
             <button
               onClick={createNewLesson}
-              disabled={!newJsonData || !newAudioUrl}
+              disabled={!newJsonData || !newAudioFile}
               style={{
                 marginTop: "15px",
                 padding: "12px 20px",
                 background:
-                  !newJsonData || !newAudioUrl ? "#334155" : "#10b981",
+                  !newJsonData || !newAudioFile ? "#334155" : "#10b981",
                 color: "#fff",
                 border: "none",
                 borderRadius: "8px",
                 fontWeight: "bold",
                 cursor:
-                  !newJsonData || !newAudioUrl ? "not-allowed" : "pointer",
+                  !newJsonData || !newAudioFile ? "not-allowed" : "pointer",
               }}
             >
               Tạo và Học Ngay 🚀
@@ -619,13 +709,14 @@ export default function App() {
                           color: "#fca5a5",
                         }}
                       >
-                        ⚠ Cần liên kết lại file MP3 để học tiếp:
+                        ⚠ Bộ nhớ bị xóa, cần nối lại MP3:
                       </p>
                       <input
                         type="file"
                         accept=".mp3, .wav, audio/mp3, audio/wav, audio/*"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           if (e.target.files[0]) {
+                            await audioDB.save(lesson.id, e.target.files[0]);
                             setSessionAudioUrls((prev) => ({
                               ...prev,
                               [lesson.id]: URL.createObjectURL(
@@ -936,7 +1027,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* VÙNG LÀM VIỆC (CHIA 2 CỘT NẾU MỞ FULL SCRIPT) */}
+          {/* VÙNG LÀM VIỆC */}
           <div
             style={{
               display: "grid",
@@ -1163,7 +1254,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* CỘT 2: FULL SCRIPT (Chỉ hiện khi toggle bật) */}
+            {/* CỘT 2: FULL SCRIPT */}
             {showFullScript && (
               <div
                 style={{
@@ -1210,7 +1301,7 @@ export default function App() {
                         transition: "all 0.3s ease",
                         cursor: "pointer",
                       }}
-                      onClick={() => playRange(idx, idx)} // Bấm vào dòng nào phát đoạn đó luôn!
+                      onClick={() => playRange(idx, idx)}
                     >
                       <span
                         style={{
