@@ -1,38 +1,74 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 
-// --- BỘ LỌC TỪ VIẾT TẮT ---
+// --- BỘ LỌC TỪ VIẾT TẮT THÔNG MINH ---
 const expandContractions = (str) => {
   let s = str?.toLowerCase() || "";
+  // Cập nhật bộ từ điển để tự nhận diện viết tắt không có dấu '
   const map = {
     "i'm": "i am",
+    im: "i am",
     "can't": "cannot",
+    cant: "cannot",
     "won't": "will not",
+    wont: "will not",
     "don't": "do not",
+    dont: "do not",
     "doesn't": "does not",
+    doesnt: "does not",
     "didn't": "did not",
+    didnt: "did not",
     "isn't": "is not",
+    isnt: "is not",
     "aren't": "are not",
+    arent: "are not",
     "haven't": "have not",
+    havent: "have not",
     "hasn't": "has not",
+    hasnt: "has not",
     "it's": "it is",
+    its: "it is",
     "that's": "that is",
+    thats: "that is",
     "there's": "there is",
+    theres: "there is",
     "what's": "what is",
+    whats: "what is",
     "he's": "he is",
+    hes: "he is",
     "she's": "she is",
+    shes: "she is",
     "you're": "you are",
-    "we're": "we are",
+    youre: "you are",
+    "we're": "we are", // Bỏ "were" để tránh nhầm với thì quá khứ của are
     "they're": "they are",
+    theyre: "they are",
     "i've": "i have",
+    ive: "i have",
     "you've": "you have",
+    youve: "you have",
     "we've": "we have",
+    weve: "we have",
     "they've": "they have",
+    theyve: "they have",
     "i'll": "i will",
+    ill: "i will",
     "you'll": "you will",
-    "we'll": "we will",
+    youll: "you will",
+    "we'll": "we will", // Bỏ "well" để tránh nhầm với từ well (tốt/khỏe)
     "they'll": "they will",
+    theyll: "they will",
     "i'd": "i would",
+    id: "i would",
     "you'd": "you would",
+    youd: "you would",
+    "he'd": "he would",
+    hed: "he would",
+    "she'd": "she would",
+    shed: "she would",
+    "we'd": "we would",
+    wed: "we would",
+    "they'd": "they would",
+    theyd: "they would",
   };
   for (const [key, val] of Object.entries(map)) {
     s = s.replace(new RegExp(`\\b${key}\\b`, "g"), val);
@@ -61,6 +97,9 @@ export default function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [activeTab, setActiveTab] = useState("LIBRARY");
 
+  // --- STATE LƯU CÂU KHÓ (TÍNH NĂNG MỚI) ---
+  const [savedSentences, setSavedSentences] = useState([]);
+
   // --- AUDIO CONTROLS & REFS ---
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isAutoLoop, setIsAutoLoop] = useState(false);
@@ -68,7 +107,7 @@ export default function App() {
   const timerRef = useRef(null);
   const resultBoxRef = useRef(null);
   const isTransitioning = useRef(false);
-  const autoPlayRef = useRef(false); // Cờ báo hiệu tự động phát an toàn
+  const autoPlayRef = useRef(false);
 
   // --- SỔ TỪ VỰNG ---
   const [vocabList, setVocabList] = useState([]);
@@ -84,6 +123,8 @@ export default function App() {
     if (savedVocab) setVocabList(JSON.parse(savedVocab));
     const savedLibrary = localStorage.getItem("my_dictation_library");
     if (savedLibrary) setLibrary(JSON.parse(savedLibrary));
+    const savedFavs = localStorage.getItem("my_saved_sentences");
+    if (savedFavs) setSavedSentences(JSON.parse(savedFavs));
   }, []);
 
   useEffect(
@@ -93,6 +134,14 @@ export default function App() {
   useEffect(
     () => localStorage.setItem("my_dictation_library", JSON.stringify(library)),
     [library]
+  );
+  useEffect(
+    () =>
+      localStorage.setItem(
+        "my_saved_sentences",
+        JSON.stringify(savedSentences)
+      ),
+    [savedSentences]
   );
 
   useEffect(() => {
@@ -113,6 +162,12 @@ export default function App() {
     ? activeLesson.data[activeLesson.currentIdx]
     : null;
   const currentAudioUrl = sessionAudioUrls[activeLessonId];
+
+  // Kiểm tra xem câu hiện tại đã được lưu chưa
+  const currentSentenceId = activeLesson
+    ? `${activeLesson.id}_${activeLesson.currentIdx}`
+    : "";
+  const isCurrentSaved = savedSentences.some((s) => s.id === currentSentenceId);
 
   // ==========================================
   // AUTO-CHECK THỜI GIAN THỰC
@@ -173,7 +228,7 @@ export default function App() {
   };
 
   // ==========================================
-  // BẢN VÁ LỖI KẸT CÂU (TRANSITION ENGINE)
+  // CHUYỂN CÂU
   // ==========================================
   const resetDictationState = () => {
     setInput("");
@@ -190,15 +245,13 @@ export default function App() {
     );
   };
 
-  // Hàm chuyển câu đa năng (dùng cho cả nút Next và Dropdown)
   const jumpToSentence = (newIdx) => {
     if (!activeLesson) return;
     updateProgress(activeLesson.id, newIdx);
     resetDictationState();
-    autoPlayRef.current = true; // Kích hoạt cờ tự động phát
+    autoPlayRef.current = true;
   };
 
-  // Khi component nhận diện dữ liệu câu mới đã nạp xong, nó mới phát nhạc
   useEffect(() => {
     if (autoPlayRef.current && currentSegment) {
       autoPlayRef.current = false;
@@ -217,13 +270,15 @@ export default function App() {
       jumpToSentence(activeLesson.currentIdx + 1);
       setTimeout(() => {
         isTransitioning.current = false;
-      }, 500); // Mở khóa sau 0.5s
+      }, 500);
     } else {
       alert("🎉 Bạn đã hoàn thành toàn bộ bài nghe này!");
     }
   };
 
-  // --- CÁC HÀM XỬ LÝ KHÁC ---
+  // ==========================================
+  // HÀNH ĐỘNG TẠO / XÓA BÀI & LƯU CÂU
+  // ==========================================
   const handleNewAudioUpload = (e) => {
     if (e.target.files[0])
       setNewAudioUrl(URL.createObjectURL(e.target.files[0]));
@@ -231,7 +286,7 @@ export default function App() {
   const handleNewJsonUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setNewFileName(file.name.replace(".json", ""));
+      setNewFileName(file.name.replace(".json", "")); // Lấy mặc định làm tên nhưng user có thể sửa
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
@@ -248,7 +303,7 @@ export default function App() {
     if (!newJsonData || !newAudioUrl) return;
     const newLesson = {
       id: Date.now().toString(),
-      name: newFileName || "Bài học mới",
+      name: newFileName || "Bài học mới", // Sử dụng tên đã được chỉnh sửa
       data: newJsonData,
       currentIdx: 0,
     };
@@ -263,8 +318,13 @@ export default function App() {
   };
 
   const deleteLesson = (id) => {
-    if (window.confirm("Bạn có chắc muốn xóa bài học này khỏi thư viện?")) {
+    if (
+      window.confirm(
+        "Bạn có chắc muốn xóa bài học này khỏi thư viện? Các câu lưu của bài này cũng sẽ bị xóa."
+      )
+    ) {
       setLibrary((prev) => prev.filter((l) => l.id !== id));
+      setSavedSentences((prev) => prev.filter((s) => s.lessonId !== id)); // Xóa luôn câu đã lưu của bài này
       if (activeLessonId === id) {
         setActiveLessonId(null);
         setActiveTab("LIBRARY");
@@ -272,6 +332,51 @@ export default function App() {
     }
   };
 
+  // Nút bấm Lưu / Hủy lưu câu khó
+  const toggleSaveSentence = () => {
+    if (!activeLesson || !currentSegment) return;
+    if (isCurrentSaved) {
+      setSavedSentences((prev) =>
+        prev.filter((s) => s.id !== currentSentenceId)
+      );
+    } else {
+      setSavedSentences((prev) => [
+        ...prev,
+        {
+          id: currentSentenceId,
+          lessonId: activeLesson.id,
+          lessonName: activeLesson.name,
+          sentenceIdx: activeLesson.currentIdx,
+          transcript: currentSegment.transcript,
+          translation: currentSegment.translation,
+        },
+      ]);
+    }
+  };
+
+  // Nhảy từ danh sách đã lưu về thẳng bài nghe
+  const playSavedSentence = (lessonId, sentenceIdx) => {
+    if (!sessionAudioUrls[lessonId]) {
+      alert(
+        "Bài học này chưa được kết nối Audio trong phiên làm việc. Vui lòng quay lại Thư viện và bấm 'Học tiếp' để kết nối MP3 trước."
+      );
+      setActiveTab("LIBRARY");
+      return;
+    }
+    setActiveLessonId(lessonId);
+    updateProgress(lessonId, sentenceIdx);
+    resetDictationState();
+    setActiveTab("DICTATION");
+    autoPlayRef.current = true;
+  };
+
+  const removeSavedSentence = (id) => {
+    setSavedSentences((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  // ==========================================
+  // KIỂM TRA ĐÁP ÁN (DICTATION LOGIC)
+  // ==========================================
   const handleCheck = () => {
     if (!input.trim() || !currentSegment) return;
     const transcriptStr = normalize(currentSegment.transcript);
@@ -346,7 +451,7 @@ export default function App() {
     <div
       style={{
         padding: "20px",
-        maxWidth: "900px",
+        maxWidth: "1000px",
         margin: "0 auto",
         fontFamily: "sans-serif",
         backgroundColor: "#0f172a",
@@ -358,6 +463,7 @@ export default function App() {
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           gap: "10px",
           borderBottom: "2px solid #334155",
           paddingBottom: "10px",
@@ -368,6 +474,7 @@ export default function App() {
           onClick={() => setActiveTab("LIBRARY")}
           style={{
             flex: 1,
+            minWidth: "120px",
             padding: "12px",
             fontSize: "16px",
             fontWeight: "bold",
@@ -388,6 +495,7 @@ export default function App() {
           }}
           style={{
             flex: 1,
+            minWidth: "120px",
             padding: "12px",
             fontSize: "16px",
             fontWeight: "bold",
@@ -403,9 +511,28 @@ export default function App() {
           🎧 Luyện Nghe
         </button>
         <button
+          onClick={() => setActiveTab("SAVED")}
+          style={{
+            flex: 1,
+            minWidth: "120px",
+            padding: "12px",
+            fontSize: "16px",
+            fontWeight: "bold",
+            background: activeTab === "SAVED" ? "#f59e0b" : "transparent",
+            color: activeTab === "SAVED" ? "#fff" : "#94a3b8",
+            border: "none",
+            borderRadius: "8px",
+            cursor: "pointer",
+            transition: "all 0.3s",
+          }}
+        >
+          ⭐ Câu Đã Lưu ({savedSentences.length})
+        </button>
+        <button
           onClick={() => setActiveTab("VOCAB")}
           style={{
             flex: 1,
+            minWidth: "120px",
             padding: "12px",
             fontSize: "16px",
             fontWeight: "bold",
@@ -436,7 +563,15 @@ export default function App() {
             <h3 style={{ color: "#38bdf8", marginTop: 0 }}>
               ➕ Thêm Bài Học Mới
             </h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "15px" }}>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "15px",
+                alignItems: "flex-start",
+              }}
+            >
               <div style={{ flex: 1, minWidth: "200px" }}>
                 <p
                   style={{
@@ -445,13 +580,19 @@ export default function App() {
                     color: "#94a3b8",
                   }}
                 >
-                  1. Tải lên Audio (.mp3)
+                  1. Audio (.mp3)
                 </p>
                 <input
                   type="file"
                   accept=".mp3, .wav, audio/mp3, audio/wav, audio/*"
                   onChange={handleNewAudioUpload}
-                  style={{ color: "#fff" }}
+                  style={{
+                    color: "#fff",
+                    padding: "8px",
+                    background: "#0f172a",
+                    borderRadius: "6px",
+                    width: "100%",
+                  }}
                 />
               </div>
               <div style={{ flex: 1, minWidth: "200px" }}>
@@ -462,21 +603,56 @@ export default function App() {
                     color: "#94a3b8",
                   }}
                 >
-                  2. Tải lên Script (.json)
+                  2. Script (.json)
                 </p>
                 <input
                   type="file"
                   accept=".json"
                   onChange={handleNewJsonUpload}
-                  style={{ color: "#fff" }}
+                  style={{
+                    color: "#fff",
+                    padding: "8px",
+                    background: "#0f172a",
+                    borderRadius: "6px",
+                    width: "100%",
+                  }}
+                />
+              </div>
+
+              {/* TÍNH NĂNG MỚI: CHO PHÉP ĐỔI TÊN BÀI HỌC */}
+              <div style={{ flex: 1, minWidth: "200px" }}>
+                <p
+                  style={{
+                    margin: "0 0 5px 0",
+                    fontSize: "14px",
+                    color: "#94a3b8",
+                  }}
+                >
+                  3. Tên bài học (Sửa tùy ý)
+                </p>
+                <input
+                  type="text"
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  placeholder="Nhập tên dễ nhớ..."
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    borderRadius: "6px",
+                    border: "1px solid #334155",
+                    background: "#0f172a",
+                    color: "#fff",
+                    outline: "none",
+                  }}
                 />
               </div>
             </div>
+
             <button
               onClick={createNewLesson}
               disabled={!newJsonData || !newAudioUrl}
               style={{
-                marginTop: "15px",
+                marginTop: "20px",
                 padding: "12px 20px",
                 background:
                   !newJsonData || !newAudioUrl ? "#334155" : "#10b981",
@@ -486,6 +662,7 @@ export default function App() {
                 fontWeight: "bold",
                 cursor:
                   !newJsonData || !newAudioUrl ? "not-allowed" : "pointer",
+                width: "100%",
               }}
             >
               Tạo và Học Ngay 🚀
@@ -597,16 +774,15 @@ export default function App() {
                       </p>
                       <input
                         type="file"
-                        accept=".mp3, .wav, audio/mp3, audio/wav, audio/*"
+                        accept=".mp3, .wav, audio/*"
                         onChange={(e) => {
-                          if (e.target.files[0]) {
+                          if (e.target.files[0])
                             setSessionAudioUrls((prev) => ({
                               ...prev,
                               [lesson.id]: URL.createObjectURL(
                                 e.target.files[0]
                               ),
                             }));
-                          }
                         }}
                         style={{ color: "#fff", fontSize: "13px" }}
                       />
@@ -633,27 +809,18 @@ export default function App() {
             }}
           >
             <span
-              style={{ fontSize: "16px", color: "#94a3b8", fontWeight: "bold" }}
+              style={{ fontSize: "18px", color: "#e2e8f0", fontWeight: "bold" }}
             >
               {activeLesson.name}
             </span>
 
-            {/* THAY ĐỔI: TẠO DROPDOWN CHỌN CÂU */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "#e2e8f0",
-                  fontWeight: "bold",
-                }}
-              >
-                Câu
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "15px", color: "#94a3b8" }}>Câu</span>
               <select
                 value={activeLesson.currentIdx}
                 onChange={(e) => jumpToSentence(parseInt(e.target.value, 10))}
                 style={{
-                  padding: "6px 12px",
+                  padding: "6px 10px",
                   borderRadius: "8px",
                   background: "#1e293b",
                   color: "#38bdf8",
@@ -670,15 +837,27 @@ export default function App() {
                   </option>
                 ))}
               </select>
-              <span
-                style={{
-                  fontSize: "16px",
-                  color: "#94a3b8",
-                  fontWeight: "bold",
-                }}
-              >
+              <span style={{ fontSize: "15px", color: "#94a3b8" }}>
                 / {activeLesson.data.length}
               </span>
+
+              {/* TÍNH NĂNG MỚI: NÚT LƯU CÂU KHÓ */}
+              <button
+                onClick={toggleSaveSentence}
+                title="Lưu câu này vào danh sách ôn tập"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "24px",
+                  padding: "0 5px",
+                  color: isCurrentSaved ? "#f59e0b" : "#64748b",
+                  transition: "transform 0.2s",
+                  transform: isCurrentSaved ? "scale(1.1)" : "scale(1)",
+                }}
+              >
+                {isCurrentSaved ? "⭐" : "☆"}
+              </button>
             </div>
           </div>
 
@@ -712,7 +891,6 @@ export default function App() {
               >
                 ▶ Phát câu này
               </button>
-
               <button
                 onClick={() =>
                   playRange(
@@ -730,9 +908,8 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                🔗 Nối câu trước (n-1)
+                🔗 Nối câu (n-1)
               </button>
-
               <button
                 onClick={() => playRange(0, activeLesson.currentIdx)}
                 style={{
@@ -747,7 +924,6 @@ export default function App() {
               >
                 ⏮ Nghe từ câu 1
               </button>
-
               <button
                 onClick={rewindAudio}
                 style={{
@@ -819,7 +995,7 @@ export default function App() {
                 isSuccess ? nextSentence() : handleCheck();
               }
             }}
-            placeholder="Gõ đáp án vào đây... (Hệ thống tự động chấm điểm)"
+            placeholder="Gõ đáp án vào đây... (Hệ thống tự động chấm điểm thông minh)"
             style={{
               width: "100%",
               height: "100px",
@@ -1029,7 +1205,140 @@ export default function App() {
         </>
       )}
 
-      {/* ================= TAB 3: SỔ TỪ VỰNG ================= */}
+      {/* ================= TAB MỚI: DANH SÁCH CÂU ĐÃ LƯU ================= */}
+      {activeTab === "SAVED" && (
+        <div
+          style={{
+            background: "#1e293b",
+            padding: "20px",
+            borderRadius: "12px",
+          }}
+        >
+          <h3
+            style={{
+              color: "#f59e0b",
+              marginTop: 0,
+              borderBottom: "1px solid #334155",
+              paddingBottom: "10px",
+            }}
+          >
+            ⭐ Danh Sách Ôn Tập ({savedSentences.length} câu)
+          </h3>
+
+          {savedSentences.length === 0 ? (
+            <p
+              style={{
+                color: "#64748b",
+                fontStyle: "italic",
+                textAlign: "center",
+                padding: "20px",
+              }}
+            >
+              Bạn chưa lưu câu nào. Khi đang luyện nghe, hãy bấm vào biểu tượng
+              ngôi sao (☆) góc phải để lưu câu khó vào đây nhé!
+            </p>
+          ) : (
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "15px" }}
+            >
+              {savedSentences.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    background: "#0f172a",
+                    padding: "15px",
+                    borderRadius: "10px",
+                    borderLeft: "4px solid #f59e0b",
+                    position: "relative",
+                  }}
+                >
+                  <button
+                    onClick={() => removeSavedSentence(item.id)}
+                    style={{
+                      position: "absolute",
+                      top: "15px",
+                      right: "15px",
+                      background: "transparent",
+                      border: "none",
+                      color: "#ef4444",
+                      fontSize: "18px",
+                      cursor: "pointer",
+                    }}
+                    title="Xóa khỏi danh sách"
+                  >
+                    ✖
+                  </button>
+
+                  <div style={{ marginBottom: "10px" }}>
+                    <span
+                      style={{
+                        background: "rgba(245, 158, 11, 0.2)",
+                        color: "#fcd34d",
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        fontSize: "12px",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {item.lessonName}
+                    </span>
+                    <span
+                      style={{
+                        color: "#94a3b8",
+                        fontSize: "13px",
+                        marginLeft: "10px",
+                      }}
+                    >
+                      Câu {item.sentenceIdx + 1}
+                    </span>
+                  </div>
+
+                  <p
+                    style={{
+                      margin: "0 0 8px 0",
+                      fontSize: "18px",
+                      color: "#e2e8f0",
+                      paddingRight: "30px",
+                      lineHeight: "1.5",
+                    }}
+                  >
+                    {item.transcript}
+                  </p>
+                  <p
+                    style={{
+                      margin: "0 0 15px 0",
+                      color: "#94a3b8",
+                      fontStyle: "italic",
+                      fontSize: "14px",
+                    }}
+                  >
+                    🇻🇳 {item.translation}
+                  </p>
+
+                  <button
+                    onClick={() =>
+                      playSavedSentence(item.lessonId, item.sentenceIdx)
+                    }
+                    style={{
+                      padding: "8px 16px",
+                      background: "linear-gradient(135deg, #3b82f6, #2563eb)",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                    }}
+                  >
+                    🎧 Tới bài học & Nghe lại
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ================= TAB 4: SỔ TỪ VỰNG ================= */}
       {activeTab === "VOCAB" && (
         <div
           style={{
@@ -1111,7 +1420,15 @@ export default function App() {
             </button>
           </div>
 
-          <h3 style={{ color: "#38bdf8" }}>📚 Danh sách từ vựng của bạn</h3>
+          <h3
+            style={{
+              color: "#38bdf8",
+              borderBottom: "1px solid #334155",
+              paddingBottom: "10px",
+            }}
+          >
+            📚 Danh sách từ vựng của bạn
+          </h3>
           {vocabList.length === 0 ? (
             <p style={{ color: "#64748b", fontStyle: "italic" }}>
               Chưa có từ vựng nào được lưu.
@@ -1152,6 +1469,7 @@ export default function App() {
                       fontSize: "18px",
                       fontWeight: "bold",
                       color: "#e2e8f0",
+                      paddingRight: "20px",
                     }}
                   >
                     {v.word}
