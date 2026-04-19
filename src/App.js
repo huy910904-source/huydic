@@ -155,6 +155,9 @@ export default function App() {
   const [showFullScript, setShowFullScript] = useState(false);
   const [currentPlayingIdx, setCurrentPlayingIdx] = useState(-1);
 
+  // --- TÍNH NĂNG ĐỆM AUDIO (PRE-ROLL) ---
+  const [usePreRoll, setUsePreRoll] = useState(true);
+
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isAutoLoop, setIsAutoLoop] = useState(false);
   const audioRef = useRef(null);
@@ -302,8 +305,8 @@ export default function App() {
           english: currentSegment.transcript, // Cột B
         }),
       });
-      // Do dùng no-cors nên không nhận được response thực tế, cứ báo thành công
-      triggerShake(); // Rung nhẹ để báo hiệu xong
+      triggerShake();
+      alert("✅ Đã lưu câu này lên Google Sheets!");
     } catch (error) {
       alert("❌ Có lỗi xảy ra khi lưu vào Sheets.");
     }
@@ -311,7 +314,7 @@ export default function App() {
   };
 
   // ==========================================
-  // PHÁT AUDIO NGỮ CẢNH
+  // PHÁT AUDIO NGỮ CẢNH (CẬP NHẬT ĐỆM 3 GIÂY)
   // ==========================================
   const playRange = useCallback(
     (startIdx, endIdx) => {
@@ -322,8 +325,12 @@ export default function App() {
       const endSegment = activeLesson.data[safeEndIdx];
       if (!startSegment || !endSegment) return;
 
+      // Xử lý đệm thời gian (Trừ 3s nếu bật tính năng)
+      const offset = usePreRoll ? 3 : 0;
+      const actualStartTime = Math.max(0, startSegment.start_time - offset);
+
       clearInterval(timerRef.current);
-      audioRef.current.currentTime = startSegment.start_time;
+      audioRef.current.currentTime = actualStartTime;
       audioRef.current.play().catch((e) => console.log("Lỗi:", e));
       setCurrentPlayingIdx(safeStartIdx);
 
@@ -337,7 +344,7 @@ export default function App() {
 
         if (currentTime >= endSegment.end_time) {
           if (isAutoLoop && !isSuccess) {
-            audioRef.current.currentTime = startSegment.start_time;
+            audioRef.current.currentTime = actualStartTime; // Lặp lại cũng bắt đầu từ chỗ đệm 3s
             audioRef.current.play();
           } else {
             audioRef.current.pause();
@@ -347,7 +354,7 @@ export default function App() {
         }
       }, 100);
     },
-    [activeLesson, isAutoLoop, isSuccess]
+    [activeLesson, isAutoLoop, isSuccess, usePreRoll]
   );
 
   const playSegment = useCallback(() => {
@@ -581,17 +588,32 @@ export default function App() {
     }
   };
 
+  // BẢN VÁ: HÀM NHẢY CÂU TỪ TAB ĐÃ LƯU
   const playSavedSentence = (lessonId, sentenceIdx) => {
     if (!sessionAudioUrls[lessonId]) {
       alert("Cần nối lại Audio ở tab Thư Viện trước!");
       setActiveTab("LIBRARY");
       return;
     }
+
+    setReviewMode(false); // Tắt chế độ ôn câu khó để không bị kẹt bộ lọc
     setActiveLessonId(lessonId);
-    updateProgress(lessonId, sentenceIdx);
+
+    // Ép cập nhật lại thư viện để trỏ đúng vào câu muốn nghe
+    setLibrary((prev) =>
+      prev.map((lesson) =>
+        lesson.id === lessonId ? { ...lesson, currentIdx: sentenceIdx } : lesson
+      )
+    );
+
     resetDictationState();
     setActiveTab("DICTATION");
-    autoPlayRef.current = true;
+    setKeyForAnimation((prev) => prev + 1);
+
+    // Kích hoạt auto-play
+    setTimeout(() => {
+      autoPlayRef.current = true;
+    }, 100);
   };
 
   // KIỂM TRA ĐÁP ÁN
@@ -1228,7 +1250,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* BẢNG ĐIỀU KHIỂN AUDIO */}
+            {/* BẢNG ĐIỀU KHIỂN AUDIO VÀ NÚT LƯU GOOGLE SHEETS MỚI NHẤT */}
             <div
               className="glass-panel"
               style={{
@@ -1310,6 +1332,25 @@ export default function App() {
                   }}
                 >
                   ⏪ Lùi 2s
+                </button>
+
+                {/* NÚT LƯU SHEET TO ĐÙNG Ở ĐÂY */}
+                <button
+                  className="btn-hover"
+                  onClick={handleSaveToSheet}
+                  disabled={isSavingSheet}
+                  style={{
+                    padding: "12px 18px",
+                    borderRadius: "10px",
+                    background: "linear-gradient(135deg, #10b981, #059669)",
+                    color: "#fff",
+                    border: "none",
+                    fontWeight: "bold",
+                    cursor: isSavingSheet ? "wait" : "pointer",
+                    boxShadow: "0 4px 10px rgba(16, 185, 129, 0.3)",
+                  }}
+                >
+                  {isSavingSheet ? "⏳ Đang lưu..." : "🚀 Lưu Google Sheet"}
                 </button>
               </div>
 
@@ -1405,6 +1446,31 @@ export default function App() {
                   alignItems: "center",
                 }}
               >
+                {/* CÔNG TẮC ĐỆM 3 GIÂY */}
+                <label
+                  className="btn-hover"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    cursor: "pointer",
+                    fontSize: "15px",
+                    color: "#60a5fa",
+                    fontWeight: "bold",
+                    padding: "5px 10px",
+                    background: "rgba(96, 165, 250, 0.1)",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={usePreRoll}
+                    onChange={(e) => setUsePreRoll(e.target.checked)}
+                    style={{ transform: "scale(1.2)" }}
+                  />{" "}
+                  ⏪ Đệm 3s (Chống cắt mất chữ)
+                </label>
+
                 <label
                   className="btn-hover"
                   style={{
